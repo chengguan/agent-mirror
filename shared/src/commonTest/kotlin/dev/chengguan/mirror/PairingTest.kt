@@ -14,12 +14,29 @@ class PairingTest {
             "&fp=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
     @Test
+    fun looksLikePairingPayloadAcceptsScheme() {
+        assertTrue(looksLikePairingPayload(valid))
+        assertTrue(looksLikePairingPayload("GROK-MIRROR:$valid"))
+        assertTrue(!looksLikePairingPayload("https://example.com"))
+        assertTrue(!looksLikePairingPayload(""))
+    }
+
+    @Test
     fun parseValidLanPairing() {
         val pairing = parsePairing(valid)
         assertNotNull(pairing)
         assertEquals("192.168.1.20", pairing.host)
         assertEquals(8787, pairing.port)
         assertEquals("01a003db-06b0-7a53-9d42-f263250c7890", pairing.sessionId)
+        assertEquals(false, pairing.requireApple)
+    }
+
+    @Test
+    fun parseRequireAppleFlag() {
+        val pairing = parsePairing("$valid&apple=1")
+        assertNotNull(pairing)
+        assertEquals(true, pairing.requireApple)
+        assertTrue(!("$valid&apple=1").contains("@"))
     }
 
     @Test
@@ -29,9 +46,34 @@ class PairingTest {
     }
 
     @Test
+    fun acceptTailscaleCgnat() {
+        val raw = valid.replace("192.168.1.20", "100.77.197.23")
+        assertNotNull(parsePairing(raw))
+    }
+
+    @Test
+    fun rejectNearbyNonTailscale100() {
+        assertNull(parsePairing(valid.replace("192.168.1.20", "100.63.0.1")))
+        assertNull(parsePairing(valid.replace("192.168.1.20", "100.128.0.1")))
+    }
+
+    @Test
     fun rejectHostname() {
         val raw = valid.replace("192.168.1.20", "evil.example")
         assertNull(parsePairing(raw))
+    }
+
+    @Test
+    fun acceptTailscaleMagicDns() {
+        val raw = valid.replace("192.168.1.20", "chengs-macbook-air.tailb2aa5a.ts.net")
+        assertNotNull(parsePairing(raw))
+    }
+
+    @Test
+    fun rejectFakeTsNet() {
+        assertNull(parsePairing(valid.replace("192.168.1.20", "evil.ts.net.attacker.com")))
+        assertNull(parsePairing(valid.replace("192.168.1.20", "ts.net")))
+        assertNull(parsePairing(valid.replace("192.168.1.20", "x.ts.net")))
     }
 
     @Test
@@ -82,14 +124,19 @@ class PairingTest {
 
     @Test
     fun parseSessionStatusFromSnapshot() {
-        val json = """{"messages":[{"role":"user","text":"hi"}],"status":{"phase":"working","detail":"Reading file","model":"grok-4.6","inbox":0,"tui":true,"usage_percent":52,"tokens_used":262235,"tokens_window":500000}}"""
+        val json = """{"messages":[{"role":"user","text":"hi"}],"status":{"phase":"working","detail":"Reading file","model":"grok-4.6","inbox":0,"tui":true,"usage_percent":55,"context_percent":17,"billing":true,"billing_kind":"weekly","billing_resets":"2026-08-20","subscription_tier":"X Premium+","tokens_used":262235,"tokens_window":500000}}"""
         val status = parseSessionStatus(json)
         assertNotNull(status)
         assertEquals("working", status.phase)
         assertEquals("Reading file", status.detail)
         assertEquals("grok-4.6", status.model)
         assertEquals(true, status.tui)
-        assertEquals(52, status.usagePercent)
+        assertEquals(55, status.usagePercent)
+        assertEquals(17, status.contextPercent)
+        assertEquals(true, status.billing)
+        assertEquals("weekly", status.billingKind)
+        assertEquals("2026-08-20", status.billingResets)
+        assertEquals("X Premium+", status.subscriptionTier)
         assertEquals(262235, status.tokensUsed)
     }
 

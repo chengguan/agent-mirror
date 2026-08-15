@@ -25,24 +25,40 @@ object IosHttp {
 
 actual fun platformMirrorApi(pairing: Pairing): MirrorApi = IosMirrorApi(pairing)
 
+actual fun canProveAppleId(): Boolean = AppleSignIn.host != null
+
 class IosMirrorApi(private val pairing: Pairing) : MirrorApi {
     override suspend fun fetchMessages(): Result<List<ChatMessage>> =
         pull().map { it.messages }
 
     override suspend fun send(text: String): Result<List<ChatMessage>> =
-        sendSnapshot(text).map { it.messages }
+        sendSnapshot(text)
 
     override suspend fun pull(): Result<MirrorSnapshot> =
         request("GET", "/v1/messages", null)
 
-    private suspend fun sendSnapshot(text: String): Result<MirrorSnapshot> =
-        request("POST", "/v1/message", """{"text":"${escapeJson(text)}"}""")
+    override suspend fun bindApple(identityToken: String): Result<Unit> {
+        val clipped = identityToken.trim().take(8_192)
+        if (clipped.count { it == '.' } != 2) {
+            return Result.failure(IllegalStateException("bad apple token"))
+        }
+        return requestRaw("POST", "/v1/apple", """{"identity_token":"${escapeJson(clipped)}"}""").map { }
+    }
+
+    private suspend fun sendSnapshot(text: String): Result<List<ChatMessage>> =
+        request("POST", "/v1/message", """{"text":"${escapeJson(text)}"}""").map { it.messages }
 
     private suspend fun request(
         method: String,
         path: String,
         body: String?,
-    ): Result<MirrorSnapshot> = suspendCancellableCoroutine { continuation ->
+    ): Result<MirrorSnapshot> = requestRaw(method, path, body).map { parseSnapshot(it) }
+
+    private suspend fun requestRaw(
+        method: String,
+        path: String,
+        body: String?,
+    ): Result<String> = suspendCancellableCoroutine { continuation ->
         val client = IosHttp.client
         if (client == null) {
             continuation.resume(Result.failure(IllegalStateException("http not installed")))
@@ -56,7 +72,7 @@ class IosMirrorApi(private val pairing: Pairing) : MirrorApi {
             val result = if (error != null || payload == null) {
                 Result.failure(IllegalStateException(error ?: "empty"))
             } else {
-                runCatching { parseSnapshot(payload) }.getOrElse { MirrorSnapshot(emptyList()) }.let { Result.success(it) }
+                Result.success(payload)
             }
             runCatching { continuation.resume(result) }
         }

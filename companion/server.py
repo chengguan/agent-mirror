@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from companion.apple import DEFAULT_AUDIENCE, verify_apple_identity_token
 from companion.inbox import append_inbox, load_inbox, tui_owns_session
 from companion.security import MAX_MESSAGE, token_matches, valid_message
 from companion.session_log import load_messages
@@ -32,11 +33,18 @@ class BridgeState:
         session_id: str,
         session_dir: Path,
         cwd: Path,
+        require_apple: bool = False,
+        apple_audience: str = DEFAULT_AUDIENCE,
+        apple_bind_path: Path | None = None,
     ) -> None:
         self.token = token
         self.session_id = session_id
         self.session_dir = session_dir
         self.cwd = cwd
+        self.require_apple = require_apple
+        self.apple_audience = apple_audience
+        self.apple_bind_path = apple_bind_path
+        self.apple_sub: str | None = _load_apple_bind(apple_bind_path, session_id) if require_apple else None
         self.lock = threading.Lock()
         self.busy = False
 
@@ -85,6 +93,9 @@ def make_handler(state: BridgeState):
             if not self._authorized():
                 self._unauthorized()
                 return
+            if not self._apple_ready():
+                self._bad(403, "apple required")
+                return
             if path == "/v1/messages":
                 self._ok(_snapshot(state))
                 return
@@ -93,11 +104,23 @@ def make_handler(state: BridgeState):
                 return
             self._bad(404, "not found")
 
+        def _apple_ready(self) -> bool:
+            return (not state.require_apple) or bool(state.apple_sub)
+
         def do_POST(self) -> None:
+            path = urlparse(self.path).path
+            sys_stderr = __import__("sys").stderr
+            sys_stderr.write("%s %s\n" % (self.command, path))
+            sys_stderr.flush()
             if not self._authorized():
                 self._unauthorized()
                 return
-            path = urlparse(self.path).path
+            if path == "/v1/apple":
+                self._bind_apple()
+                return
+            if not self._apple_ready():
+                self._bad(403, "apple required")
+                return
             if path != "/v1/message":
                 self._bad(404, "not found")
                 return
@@ -157,7 +180,57 @@ def make_handler(state: BridgeState):
             payload["ok"] = True
             self._ok(payload)
 
+        def _bind_apple(self) -> None:
+            if not state.require_apple:
+                self._bad(400, "apple not required")
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 1 or length > 8_192 + 64:
+                self._bad(413, "too large")
+                return
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                self._bad(400, "invalid json")
+                return
+            identity = str(body.get("identity_token") or "")
+            try:
+                sub = verify_apple_identity_token(identity, audience=state.apple_audience)
+            except ValueError:
+                self._bad(403, "apple identity rejected")
+                return
+            with state.lock:
+                if state.apple_sub and state.apple_sub != sub:
+                    self._bad(403, "apple identity mismatch")
+                    return
+                state.apple_sub = sub
+                _save_apple_bind(state.apple_bind_path, state.session_id, sub)
+            self._ok({"ok": True, "apple": True})
+
     return Handler
+
+
+def _load_apple_bind(path: Path | None, session_id: str) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("sid") != session_id:
+        return None
+    sub = str(data.get("sub") or "").strip()
+    return sub if 8 <= len(sub) <= 128 else None
+
+
+def _save_apple_bind(path: Path | None, session_id: str, sub: str) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"sid": session_id, "sub": sub}), encoding="utf-8")
+    path.chmod(0o600)
 
 
 def _json_bytes(payload: Any) -> bytes:

@@ -1,0 +1,21 @@
+package dev.chengguan.mirror
+
+/**
+ * Process-local camera host. iOS/Android install a native QR scanner that
+ * never logs the payload (it contains tok). Pairing validation stays in
+ * [parsePairing] — the scanner only returns the raw string.
+ */
+fun interface QrScanHost {
+    fun scan(onResult: (payload: String?, error: String?) -> Unit)
+}
+
+object QrScanner {
+    var host: QrScanHost? = null
+}
+
+fun looksLikePairingPayload(raw: String): Boolean {
+    val trimmed = raw.trim()
+    if (trimmed.length > 2_000) return false
+    return trimmed.startsWith("grok-mirror://", ignoreCase = true) ||
+        trimmed.startsWith("GROK-MIRROR:")
+}

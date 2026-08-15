@@ -10,6 +10,7 @@ data class Pairing(
     val sessionId: String,
     val token: String,
     val fingerprint: String,
+    val requireApple: Boolean = false,
 )
 
 fun parsePairing(raw: String): Pairing? {
@@ -34,15 +35,36 @@ fun parsePairing(raw: String): Pairing? {
     val sid = map["sid"] ?: return null
     val tok = map["tok"] ?: return null
     val fp = (map["fp"] ?: "").lowercase().removePrefix("sha256:")
-    if (!isLanIpv4(host)) return null
+    if (!isAllowedPairingHost(host)) return null
     if (port !in 1..65535) return null
     if (!sid.matches(Regex("""^[A-Za-z0-9_-]{8,80}$"""))) return null
     if (tok.length < 16 || tok.length > 128) return null
     if (!fp.matches(Regex("""^[0-9a-f]{64}$"""))) return null
-    return Pairing(host, port, sid, tok, fp)
+    val apple = (map["apple"] ?: "").lowercase()
+    val requireApple = apple == "1" || apple == "true"
+    return Pairing(host, port, sid, tok, fp, requireApple)
 }
 
-/** RFC1918 or loopback only — v1 is same-Wi-Fi, never a public hostname. */
+fun isAllowedPairingHost(host: String): Boolean =
+    isLanIpv4(host) || isTailscaleMagicDns(host)
+
+/** Tailscale MagicDNS only — e.g. mac.tailxxxx.ts.net. Not arbitrary hostnames. */
+fun isTailscaleMagicDns(host: String): Boolean {
+    val h = host.trim().lowercase().trimEnd('.')
+    if (h.length > 253 || !h.endsWith(".ts.net") || h == "ts.net") return false
+    val labels = h.split('.')
+    if (labels.size < 4) return false
+    return labels.all { label ->
+        label.isNotEmpty() && label.length <= 63 &&
+            label[0].isLetterOrDigit() && label.last().isLetterOrDigit() &&
+            label.all { ch -> ch.isLetterOrDigit() || ch == '-' }
+    }
+}
+
+/**
+ * RFC1918, loopback, or Tailscale CGNAT (100.64/10). Never a public hostname
+ * or a routable public IPv4 (SSRF / DNS rebinding).
+ */
 fun isLanIpv4(host: String): Boolean {
     val parts = host.split('.')
     if (parts.size != 4) return false
@@ -57,6 +79,8 @@ fun isLanIpv4(host: String): Boolean {
     if (a == 127 && nums[1] == 0 && nums[2] == 0 && nums[3] == 1) return true
     if (a == 192 && b == 168) return true
     if (a == 172 && b in 16..31) return true
+    // Tailscale / RFC6598 shared address space — not a public IP.
+    if (a == 100 && b in 64..127) return true
     return false
 }
 
@@ -100,6 +124,11 @@ data class SessionStatus(
     val toolCalls: Int = 0,
     val durationSeconds: Int = 0,
     val tokensBeforeCompaction: Int = 0,
+    val contextPercent: Int = 0,
+    val billing: Boolean = false,
+    val billingKind: String = "",
+    val billingResets: String = "",
+    val subscriptionTier: String = "",
 )
 
 data class MirrorSnapshot(
@@ -155,6 +184,11 @@ fun parseSessionStatus(json: String): SessionStatus? {
                 toolCalls = jsonIntField(obj, "tool_calls") ?: 0,
                 durationSeconds = jsonIntField(obj, "duration_seconds") ?: 0,
                 tokensBeforeCompaction = jsonIntField(obj, "tokens_before_compaction") ?: 0,
+                contextPercent = jsonIntField(obj, "context_percent") ?: 0,
+                billing = obj.contains("\"billing\":true") || jsonStringField(obj, "billing") == "true",
+                billingKind = jsonStringField(obj, "billing_kind")?.let(::unescapeJson).orEmpty(),
+                billingResets = jsonStringField(obj, "billing_resets")?.let(::unescapeJson).orEmpty(),
+                subscriptionTier = jsonStringField(obj, "subscription_tier")?.let(::unescapeJson).orEmpty(),
             )
         }
         at = json.lastIndexOf("\"phase\"", at - 1)

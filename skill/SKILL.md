@@ -6,7 +6,7 @@ description: >
   grok-mirror, Mirror app, show the QR, or /grok-mirror.
 ---
 
-# Grok Mirror pairing (v1.0 - private network edition)
+# Grok Mirror pairing (v2.0 - TailScale connectivity)
 
 When the user wants to mirror **this** session to their phone:
 
@@ -18,9 +18,17 @@ cd ~/projects/grok-mirror
 python3 -m companion pair --session <SESSION_ID> --cwd <WORKSPACE>
 ```
 
-Use the real session id and the workspace cwd. Bind stays on the LAN (`0.0.0.0:8787`). Do not expose it to the public internet. Do not add BLE.
+If they asked to lock the QR to their Apple ID (iPhone only; Android is rejected):
 
-3. Show the user the terminal QR (and `~/.grok/mirror/pair.png` if written). Tell them to scan it with the **Mirror** app, or with the system Camera if the app is installed (`grok-mirror://` URL).
+```bash
+python3 -m companion pair --session <SESSION_ID> --cwd <WORKSPACE> --require-apple
+```
+
+The QR carries `apple=1` only — never an Apple ID or email. After scan, Mirror runs Sign in with Apple; the companion verifies Apple’s JWT and binds that `sub`. A stolen QR on another Apple ID (or any Android) is refused.
+
+Use the real session id and the workspace cwd. Bind stays on the LAN (`0.0.0.0:8787`). If Tailscale is up, the QR uses the Mac’s `100.x` address so the phone can stay on cellular. Do not expose the companion to the public internet. Do not add BLE.
+
+3. Show the user the terminal QR (and `~/.grok/mirror/pair.png` if written). Tell them to tap **Scan QR** in the Mirror app (or use the system Camera — it opens `grok-mirror://`). If `--require-apple`, they must confirm with their Apple ID on an iPhone.
 4. Leave the companion process running in the background so the phone can poll and send. Do not print the pairing token again later in logs.
 5. If this TUI is already running, the companion queues phone sends in `~/.grok/mirror/inbox/<SESSION_ID>.jsonl` instead of `grok --resume` (that would hang). After pairing, start a **persistent monitor** (do not print tokens):
 

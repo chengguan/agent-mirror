@@ -33,10 +33,26 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Mirror uses Face ID to unlock the pairing secret stored in the Keychain.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Mirror uses the camera to scan the pairing QR from the Mac companion. The image is not stored or sent anywhere.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>ts.net</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
 	<key>UIFileSharingEnabled</key>
 	<false/>

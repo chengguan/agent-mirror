@@ -51,6 +51,7 @@ import dev.chengguan.mirror.APP_VERSION_LABEL
 import dev.chengguan.mirror.ChatMessage
 import dev.chengguan.mirror.ChatStyle
 import dev.chengguan.mirror.MirrorUiState
+import dev.chengguan.mirror.QrScanner
 import dev.chengguan.mirror.SessionStatus
 import dev.chengguan.mirror.parseInlineMarkdown
 
@@ -153,27 +154,54 @@ private fun LockScreen(state: MirrorUiState, onUnlock: () -> Unit) {
 
 @Composable
 private fun PairPane(status: String?, onApplyLink: (String) -> Unit) {
-    var draft = remember { androidx.compose.runtime.mutableStateOf("") }
+    var draft by remember { mutableStateOf("") }
+    var scanning by remember { mutableStateOf(false) }
+    var scanStatus by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            "Scan the QR with the system Camera (opens grok-mirror://), or paste the pairing URL from the Mac companion.",
+            "Scan the pairing QR with the camera, or paste the pairing URL from the Mac companion.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Button(
+            onClick = {
+                val host = QrScanner.host
+                if (host == null) {
+                    scanStatus = "Camera scanner is not available on this build."
+                    return@Button
+                }
+                if (scanning) return@Button
+                scanning = true
+                scanStatus = null
+                host.scan { payload, error ->
+                    scanning = false
+                    if (payload != null) {
+                        val clipped = payload.trim().take(2_000)
+                        draft = clipped
+                        onApplyLink(clipped)
+                    } else if (!error.isNullOrBlank()) {
+                        scanStatus = error
+                    }
+                }
+            },
+            enabled = !scanning,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (scanning) "Opening camera…" else "Scan QR") }
         OutlinedTextField(
-            value = draft.value,
-            onValueChange = { if (it.length <= 2_000) draft.value = it },
+            value = draft,
+            onValueChange = { if (it.length <= 2_000) draft = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Pairing URL") },
             singleLine = true,
+            enabled = !scanning,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onApplyLink(draft.value) }),
+            keyboardActions = KeyboardActions(onDone = { onApplyLink(draft) }),
         )
-        Button(
-            onClick = { onApplyLink(draft.value) },
-            enabled = draft.value.isNotBlank(),
+        OutlinedButton(
+            onClick = { onApplyLink(draft) },
+            enabled = !scanning && draft.isNotBlank(),
         ) { Text("Pair") }
-        status?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        (scanStatus ?: status)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
@@ -246,10 +274,12 @@ private fun ThreadPane(
 @Composable
 private fun UsageBar(sessionStatus: SessionStatus?) {
     val usage = sessionStatus ?: return
-    if (usage.tokensWindow <= 0 && usage.usagePercent <= 0) return
+    val hasBilling = usage.billing || usage.billingKind.isNotEmpty()
+    if (!hasBilling && usage.tokensWindow <= 0 && usage.usagePercent <= 0) return
     var open by remember { mutableStateOf(false) }
-    val percent = usage.usagePercent.coerceIn(0, 100)
+    val percent = if (hasBilling) usage.usagePercent.coerceIn(0, 100) else 0
     val barColor = when {
+        !hasBilling -> MaterialTheme.colorScheme.onSurfaceVariant
         percent >= 85 -> AccentError
         percent >= 70 -> AccentWarn
         else -> AccentCyan
@@ -262,11 +292,16 @@ private fun UsageBar(sessionStatus: SessionStatus?) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Tokens", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("$percent%", style = MaterialTheme.typography.labelSmall, color = barColor, fontWeight = FontWeight.SemiBold)
+            Text("Usage", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (hasBilling) "$percent%" else "—",
+                style = MaterialTheme.typography.labelSmall,
+                color = barColor,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         LinearProgressIndicator(
-            progress = { percent / 100f },
+            progress = { if (hasBilling) percent / 100f else 0f },
             modifier = Modifier.fillMaxWidth().height(6.dp),
             color = barColor,
             trackColor = BgHighlight,
@@ -278,9 +313,35 @@ private fun UsageBar(sessionStatus: SessionStatus?) {
             title = { Text("Usage") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Context window", fontWeight = FontWeight.SemiBold, color = AccentCyan)
-                    Text("${formatCount(usage.tokensUsed)} / ${formatCount(usage.tokensWindow)} tokens")
-                    Text("$percent% of this session’s window")
+                    Text("Account credit (/usage)", fontWeight = FontWeight.SemiBold, color = AccentCyan)
+                    if (hasBilling) {
+                        val kind = when (usage.billingKind) {
+                            "weekly" -> "weekly"
+                            "monthly" -> "monthly"
+                            else -> "billing"
+                        }
+                        Text("${usage.usagePercent.coerceIn(0, 100)}% of this $kind period")
+                        if (usage.subscriptionTier.isNotBlank()) {
+                            Text("Plan: ${usage.subscriptionTier.take(40)}")
+                        }
+                        if (usage.billingResets.isNotBlank()) {
+                            Text("Resets: ${usage.billingResets}")
+                        }
+                    } else {
+                        Text("No /usage snapshot yet. Keep the Mac TUI open so it can refresh billing.")
+                    }
+                    Text("Session context", fontWeight = FontWeight.SemiBold, color = AccentCyan)
+                    if (usage.tokensWindow > 0) {
+                        Text("${formatCount(usage.tokensUsed)} / ${formatCount(usage.tokensWindow)} tokens")
+                        val ctx = if (usage.contextPercent > 0) usage.contextPercent else usage.usagePercent
+                        if (!hasBilling && ctx > 0) {
+                            Text("$ctx% of this session’s window")
+                        } else if (usage.contextPercent > 0) {
+                            Text("${usage.contextPercent}% of this session’s window")
+                        }
+                    } else {
+                        Text("Context window is not in the last snapshot.")
+                    }
                     Text("This session", fontWeight = FontWeight.SemiBold, color = AccentCyan)
                     Text("Model: ${usage.model.ifBlank { "—" }}")
                     Text("Turns: ${formatCount(usage.turns)}")
@@ -293,7 +354,7 @@ private fun UsageBar(sessionStatus: SessionStatus?) {
                         Text("Duration: ${formatDuration(usage.durationSeconds)}")
                     }
                     Text(
-                        "Account credit from /usage is not stored on disk. This is the live context window the TUI uses.",
+                        "The bar is account credit from /usage — the same figure as the TUI Usage tab. Session tokens are listed here only.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 data class MirrorUiState(
     val locked: Boolean = true,
@@ -22,7 +24,7 @@ data class MirrorUiState(
     val messages: List<ChatMessage> = emptyList(),
     val draft: String = "",
     val sending: Boolean = false,
-    val status: String? = "Unlock, then scan the QR or paste the pairing URL.",
+    val status: String? = "Unlock, then tap Scan QR or paste the pairing URL.",
     val sessionStatus: SessionStatus? = null,
     val statusExpanded: Boolean = true,
 )
@@ -88,9 +90,21 @@ class MirrorViewModel(
             _state.value = _state.value.copy(status = "That pairing code is not valid.")
             return
         }
+        if (pairing.requireApple && !canProveAppleId()) {
+            _state.value = _state.value.copy(
+                status = "This pairing is iPhone-only. It is locked to an Apple ID.",
+            )
+            return
+        }
         store.write(PAIRING_KEY, encodePairing(pairing).encodeToByteArray())
-        _state.value = _state.value.copy(pairing = pairing, status = "Paired. Fetching this session…")
-        viewModelScope.launch { refresh() }
+        _state.value = _state.value.copy(
+            pairing = pairing,
+            status = if (pairing.requireApple) "Confirm with your Apple ID…" else "Paired. Fetching this session…",
+        )
+        viewModelScope.launch {
+            if (pairing.requireApple && !proveApple(pairing)) return@launch
+            refresh()
+        }
     }
 
     fun send() {
@@ -134,15 +148,67 @@ class MirrorViewModel(
     private suspend fun refresh() {
         val pairing = _state.value.pairing ?: return
         if (_state.value.locked) return
+        val api = apiFactory(pairing)
         runCatching {
-            apiFactory(pairing).pull().onSuccess { snap ->
+            val first = api.pull()
+            val pulled = if (first.isFailure && pairing.requireApple && isAppleRequired(first.exceptionOrNull())) {
+                if (!proveApple(pairing)) return
+                api.pull()
+            } else {
+                first
+            }
+            pulled.onSuccess { snap ->
                 _state.value = _state.value.copy(
                     messages = snap.messages,
                     sessionStatus = snap.status ?: _state.value.sessionStatus,
                     status = if (snap.status != null) null else _state.value.status,
                 )
+            }.onFailure {
+                _state.value = _state.value.copy(
+                    status = "Could not reach the Mac. Keep Tailscale on, and leave the companion running.",
+                )
             }
         }
+    }
+
+    private suspend fun proveApple(pairing: Pairing): Boolean {
+        val token = requestAppleIdentityToken()
+        if (token == null) {
+            _state.value = _state.value.copy(
+                pairing = null,
+                status = "Apple ID is required for this pairing.",
+            )
+            store.delete(PAIRING_KEY)
+            return false
+        }
+        val bound = apiFactory(pairing).bindApple(token)
+        if (bound.isFailure) {
+            _state.value = _state.value.copy(
+                pairing = null,
+                status = "That Apple ID is not allowed for this pairing.",
+            )
+            store.delete(PAIRING_KEY)
+            return false
+        }
+        _state.value = _state.value.copy(status = "Paired. Fetching this session…")
+        return true
+    }
+
+    private suspend fun requestAppleIdentityToken(): String? =
+        suspendCancellableCoroutine { continuation ->
+            val host = AppleSignIn.host
+            if (host == null) {
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+            host.signIn { token, _ ->
+                if (continuation.isActive) continuation.resume(token?.trim()?.take(8_192))
+            }
+        }
+
+    private fun isAppleRequired(error: Throwable?): Boolean {
+        val msg = error?.message.orEmpty()
+        return msg.contains("403") || msg.contains("apple", ignoreCase = true)
     }
 
     fun toggleStatusExpanded() {
@@ -157,11 +223,12 @@ class MirrorViewModel(
             pairing = null,
             messages = emptyList(),
             draft = "",
-            status = "Unpaired. Scan the QR or paste the pairing URL.",
+            status = "Unpaired. Tap Scan QR or paste the pairing URL.",
         )
     }
 }
 
 fun encodePairing(pairing: Pairing): String =
     "grok-mirror://v1?host=${pairing.host}&port=${pairing.port}" +
-        "&sid=${pairing.sessionId}&tok=${pairing.token}&fp=${pairing.fingerprint}"
+        "&sid=${pairing.sessionId}&tok=${pairing.token}&fp=${pairing.fingerprint}" +
+        if (pairing.requireApple) "&apple=1" else ""

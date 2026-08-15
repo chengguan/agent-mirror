@@ -7,6 +7,8 @@ struct iOSApp: App {
 
     init() {
         IosHttp.shared.client = PinnedCompanionClient()
+        QrScanner.shared.host = IosQrScanHost()
+        AppleSignIn.shared.host = IosAppleSignIn()
     }
 
     var body: some Scene {

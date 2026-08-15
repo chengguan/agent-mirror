@@ -38,9 +38,74 @@ def valid_message(text: str) -> bool:
     return True
 
 
+TAILSCALE_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+
+
+def is_tailscale_ipv4(host: str) -> bool:
+    try:
+        parsed = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return parsed.version == 4 and parsed in TAILSCALE_CGNAT
+
+
+def tailscale_ipv4() -> str | None:
+    import shutil
+
+    binary = shutil.which("tailscale") or "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    try:
+        result = subprocess.run(
+            [binary, "ip", "-4"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        candidate = line.strip()
+        if is_tailscale_ipv4(candidate):
+            return candidate
+    return None
+
+
+def tailscale_dns_name() -> str | None:
+    import json
+    import shutil
+
+    binary = shutil.which("tailscale") or "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    try:
+        result = subprocess.run(
+            [binary, "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    name = str((payload.get("Self") or {}).get("DNSName") or "").strip().rstrip(".").lower()
+    if name.endswith(".ts.net") and name.count(".") >= 3:
+        return name
+    return None
+
+
 def lan_ip() -> str:
     import socket
 
+    magic = tailscale_dns_name()
+    if magic:
+        return magic
+    overlay = tailscale_ipv4()
+    if overlay:
+        return overlay
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect(("192.0.2.1", 80))
@@ -105,16 +170,25 @@ def cert_sha256(cert: Path) -> str:
     return hashlib.sha256(der).hexdigest()
 
 
-def pairing_url(host: str, port: int, session_id: str, token: str, fingerprint: str) -> str:
+def pairing_url(
+    host: str,
+    port: int,
+    session_id: str,
+    token: str,
+    fingerprint: str,
+    *,
+    require_apple: bool = False,
+) -> str:
     from urllib.parse import urlencode
 
-    query = urlencode(
-        {
-            "host": host,
-            "port": str(port),
-            "sid": session_id,
-            "tok": token,
-            "fp": fingerprint,
-        }
-    )
-    return f"grok-mirror://v1?{query}"
+    query: dict[str, str] = {
+        "host": host,
+        "port": str(port),
+        "sid": session_id,
+        "tok": token,
+        "fp": fingerprint,
+    }
+    if require_apple:
+        # Flag only — never put an Apple ID or email in the QR.
+        query["apple"] = "1"
+    return f"grok-mirror://v1?{urlencode(query)}"

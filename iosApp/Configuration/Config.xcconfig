@@ -1,3 +1,6 @@
 TEAM_ID=
 BUNDLE_ID=dev.chengguan.mirror
 APP_NAME=Mirror
+
+// Personal team for device Run. Not committed.
+#include? "Config.local.xcconfig"

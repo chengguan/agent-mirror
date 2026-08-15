@@ -1,12 +1,13 @@
 # grok-mirror
 
-**Mirror** — **v1.0 - private network edition**
+**Mirror** — **v2.0 - TailScale connectivity**
 
-Unofficial same-Wi-Fi companion: the Mac hosts this Grok Build session; the
-iPhone/Android app scans a QR and shows the thread so you can keep talking
-on the move.
+Unofficial companion: the Mac hosts this Grok Build session; the iPhone/Android
+app scans a QR and shows the thread so you can keep talking on the move.
+Same Wi-Fi, or Tailscale when the phone is on mobile data.
 
-Not an official xAI product. The Mac must stay on. v1 is private-network only.
+Not an official xAI product. The Mac must stay awake. Do not expose the
+companion to the public internet.
 
 ## Pieces
 
@@ -27,7 +28,9 @@ cd ~/projects/grok-mirror
 python3 -m companion pair --session <SESSION_ID> --cwd ~
 ```
 
-Scan the QR with Mirror (or Camera). Keep that process running.
+Tap **Scan QR** in Mirror and point the camera at the terminal QR (or paste
+the pairing URL). The system Camera still opens `grok-mirror://` if you
+prefer. Keep that process running.
 
 Phone sends the next turn with `grok --resume <id> --single …`. Avoid typing
 in the TUI at the same time.
@@ -59,9 +62,13 @@ Companion tests:
 python3 -m pytest
 ```
 
+Optional: lock the QR to an Apple ID (`--require-apple`). iPhone only;
+Android is rejected. The QR does not contain the Apple ID. Sign in with
+Apple needs a paid Apple Developer Program team (a Personal Team cannot
+enable that capability).
+
 ## Out of scope (v1)
 
-- Off-LAN / Tailscale
+- Public internet / Funnel / port-forward (Tailscale mesh is supported)
 - BLE
 - Official Grok cloud session sync
-- In-app camera QR scanner (use the system Camera, or paste the URL)

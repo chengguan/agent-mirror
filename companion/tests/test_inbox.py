@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from companion.inbox import append_inbox, drain_inbox, load_inbox
+from companion.inbox import append_inbox, drain_inbox, load_inbox, tui_owns_session
 from companion.server import BridgeState, _json_bytes, _visible_messages
 
 
@@ -29,6 +29,32 @@ def test_drain_inbox_removes_file(tmp_path: Path, monkeypatch):
     append_inbox(tmp_path, sid, "queued once")
     assert drain_inbox(tmp_path, sid) == [{"role": "user", "text": "queued once"}]
     assert load_inbox(tmp_path, sid) == []
+
+
+def test_tui_owns_ignores_resume(monkeypatch):
+    import subprocess as sp
+
+    class Fake:
+        stdout = (
+            "grok --resume 01a003db --single hi --output-format plain\n"
+            "/Users/chengguan/.grok/bin/grok --resume x --cwd /tmp --single y\n"
+            "python3 -m companion pair --session 01a003db\n"
+        )
+        returncode = 0
+
+    monkeypatch.setattr(sp, "run", lambda *a, **k: Fake())
+    assert tui_owns_session() is False
+
+
+def test_tui_owns_detects_interactive(monkeypatch):
+    import subprocess as sp
+
+    class Fake:
+        stdout = "grok\n/Users/chengguan/.grok/bin/grok\n"
+        returncode = 0
+
+    monkeypatch.setattr(sp, "run", lambda *a, **k: Fake())
+    assert tui_owns_session() is True
 
 
 def test_json_bytes_keeps_unicode_apostrophe():

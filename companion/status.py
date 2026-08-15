@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from companion.billing import load_billing
 from companion.inbox import load_inbox
 from companion.inbox import tui_owns_session
 
@@ -18,14 +19,24 @@ def live_status(session_dir: Path, grok_home: Path, session_id: str) -> dict[str
     inbox_n = len(load_inbox(grok_home, session_id))
     phase, detail = classify(last, inbox_n, summary)
     usage = usage_from_signals(session_dir / "signals.json", summary)
-    return {
+    billing = load_billing(grok_home)
+    # usage_percent is account /usage credit when billing is present.
+    # Context-window tokens stay on tokens_* / context_percent.
+    payload = {
         "phase": phase,
         "detail": detail[:240],
         "model": str(summary.get("current_model_id") or usage.get("model") or ""),
         "inbox": inbox_n,
         "tui": tui_owns_session(),
         **usage,
+        "context_percent": usage.get("usage_percent", 0),
+        # Do not let session-context % stand in for /usage billing.
+        "usage_percent": 0,
+        "billing": False,
     }
+    if billing:
+        payload.update(billing)
+    return payload
 
 
 def usage_from_signals(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +48,7 @@ def usage_from_signals(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
         percent = min(100, int(round(100.0 * used / window)))
     return {
         "usage_percent": max(0, min(100, percent)),
+        "context_percent": max(0, min(100, percent)),
         "tokens_used": max(0, used),
         "tokens_window": max(0, window),
         "turns": int(signals.get("turnCount") or 0),

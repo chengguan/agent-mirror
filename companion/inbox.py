@@ -55,15 +55,28 @@ def drain_inbox(grok_home: Path, session_id: str) -> list[dict[str, Any]]:
 
 
 def tui_owns_session() -> bool:
-    """True when the interactive `grok` TUI is already running."""
+    """True when the interactive TUI is running (not a hung `grok --resume`)."""
     import subprocess
 
     try:
         result = subprocess.run(
-            ["pgrep", "-x", "grok"],
+            ["ps", "-ax", "-o", "command="],
             capture_output=True,
+            text=True,
+            timeout=2,
             check=False,
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return False
-    return result.returncode == 0
+    for raw in result.stdout.splitlines():
+        line = raw.strip()
+        if "grok" not in line:
+            continue
+        if "--resume" in line or "--single" in line:
+            continue
+        if "companion" in line or "pytest" in line:
+            continue
+        name = line.split()[0].rsplit("/", 1)[-1]
+        if name.startswith("grok"):
+            return True
+    return False

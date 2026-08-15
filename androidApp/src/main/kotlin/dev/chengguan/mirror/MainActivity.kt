@@ -10,6 +10,8 @@ import dev.chengguan.mirror.security.AndroidSecurityHost
 import java.lang.ref.WeakReference
 
 class MainActivity : FragmentActivity() {
+    private val qrScanHost = AndroidQrScanHost(this)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // OWASP M6: keep the thread off screenshots and the recents thumbnail.
@@ -19,8 +21,14 @@ class MainActivity : FragmentActivity() {
         )
         AndroidSecurityHost.context = WeakReference(applicationContext)
         AndroidSecurityHost.activity = WeakReference(this)
+        QrScanner.host = qrScanHost
         enableEdgeToEdge()
         setContent { MirrorApp(incomingLink = intent?.data?.toString()) }
+    }
+
+    override fun onDestroy() {
+        if (QrScanner.host === qrScanHost) QrScanner.host = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

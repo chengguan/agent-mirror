@@ -13,6 +13,8 @@
 		2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2152FB032600AC8F00CF470E /* iOSApp.swift */; };
 		7555FF83242A565900829871 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7555FF82242A565900829871 /* ContentView.swift */; };
 		C0DE0002273AAA24004C7B11 /* MirrorHttp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE0001273AAA24004C7B11 /* MirrorHttp.swift */; };
+		C0DE0004273AAA24004C7B11 /* QrScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE0003273AAA24004C7B11 /* QrScan.swift */; };
+		C0DE0006273AAA24004C7B11 /* AppleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE0005273AAA24004C7B11 /* AppleSignIn.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +24,8 @@
 		7555FF7B242A565900829871 /* KMP App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "KMP App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7555FF82242A565900829871 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C0DE0001273AAA24004C7B11 /* MirrorHttp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorHttp.swift; sourceTree = "<group>"; };
+		C0DE0003273AAA24004C7B11 /* QrScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrScan.swift; sourceTree = "<group>"; };
+		C0DE0005273AAA24004C7B11 /* AppleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignIn.swift; sourceTree = "<group>"; };
 		7555FF8C242A565B00829871 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D3273AAA24004C7B11 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AB3632DC29227652001CCB65 /* Config.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
@@ -77,6 +81,8 @@
 				058557BA273AAA24004C7B11 /* Assets.xcassets */,
 				7555FF82242A565900829871 /* ContentView.swift */,
 				C0DE0001273AAA24004C7B11 /* MirrorHttp.swift */,
+				C0DE0003273AAA24004C7B11 /* QrScan.swift */,
+				C0DE0005273AAA24004C7B11 /* AppleSignIn.swift */,
 				7555FF8C242A565B00829871 /* Info.plist */,
 				A1B2C3D3273AAA24004C7B11 /* PrivacyInfo.xcprivacy */,
 				2152FB032600AC8F00CF470E /* iOSApp.swift */,
@@ -194,6 +200,8 @@
 				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
 				7555FF83242A565900829871 /* ContentView.swift in Sources */,
 				C0DE0002273AAA24004C7B11 /* MirrorHttp.swift in Sources */,
+				C0DE0004273AAA24004C7B11 /* QrScan.swift in Sources */,
+				C0DE0006273AAA24004C7B11 /* AppleSignIn.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

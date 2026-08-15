@@ -8,6 +8,9 @@ interface MirrorApi {
     suspend fun fetchMessages(): Result<List<ChatMessage>>
     suspend fun send(text: String): Result<List<ChatMessage>>
     suspend fun pull(): Result<MirrorSnapshot> = fetchMessages().map { MirrorSnapshot(it) }
+    suspend fun bindApple(identityToken: String): Result<Unit> =
+        Result.failure(IllegalStateException("apple not supported"))
 }
 
 expect fun platformMirrorApi(pairing: Pairing): MirrorApi
+expect fun canProveAppleId(): Boolean

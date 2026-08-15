@@ -1,2 +1,4 @@
 segno>=1.6.1
 pytest>=8.0
+PyJWT[crypto]>=2.8
+cryptography>=42.0

@@ -14,6 +14,8 @@ import javax.net.ssl.X509TrustManager
 
 actual fun platformMirrorApi(pairing: Pairing): MirrorApi = AndroidMirrorApi(pairing)
 
+actual fun canProveAppleId(): Boolean = false
+
 /**
  * HttpsURLConnection with a leaf SHA-256 pin from the pairing QR (OWASP M5).
  * System CAs are not used: the companion cert is self-signed. Trust is the pin,

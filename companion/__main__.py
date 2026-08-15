@@ -28,6 +28,16 @@ def main(argv: list[str] | None = None) -> int:
     pair.add_argument("--port", type=int, default=8787)
     pair.add_argument("--grok-home", default=str(Path.home() / ".grok"))
     pair.add_argument("--bind", default="0.0.0.0", help="Same-LAN only; do not expose to the internet")
+    pair.add_argument(
+        "--token-file",
+        help="Reuse a pairing token from a 0600 file (restart without a new QR)",
+    )
+    pair.add_argument("--quiet", action="store_true", help="Do not print the pairing URL")
+    pair.add_argument(
+        "--require-apple",
+        action="store_true",
+        help="iPhone-only: require Sign in with Apple. Android is rejected. QR has no Apple ID.",
+    )
     watch = sub.add_parser("watch", help="Print new inbox lines for the live TUI")
     watch.add_argument("--session", required=True, help="Grok session id")
     watch.add_argument("--grok-home", default=str(Path.home() / ".grok"))
@@ -54,35 +64,50 @@ def main(argv: list[str] | None = None) -> int:
 
     tls_dir = grok_home / "mirror" / "tls"
     cert, key, fingerprint = ensure_tls(tls_dir)
-    token = new_token()
+    token = _read_token_file(args.token_file) if args.token_file else new_token()
+    if not token:
+        print("invalid token file", file=sys.stderr)
+        return 2
     host = lan_ip()
-    url = pairing_url(host, args.port, args.session, token, fingerprint)
+    url = pairing_url(
+        host,
+        args.port,
+        args.session,
+        token,
+        fingerprint,
+        require_apple=args.require_apple,
+    )
 
     def out(msg: str = "") -> None:
         print(msg, flush=True)
 
     out()
-    out("Grok Mirror pairing — v1.0 - private network edition")
-    out("Scan this QR with the Mirror app, or the Camera app if the app is installed.")
-    out()
-    try:
-        import segno
+    out("Grok Mirror pairing — v2.0 - TailScale connectivity")
+    if args.require_apple:
+        out("Apple ID required — iPhone only. Android cannot pair. The QR does not contain your Apple ID.")
+    if args.quiet:
+        out("Companion listening. Pairing URL not printed.")
+    else:
+        out("Scan this QR with the Mirror app, or tap Scan QR in the app.")
+        out()
+        try:
+            import segno
 
-        qr = segno.make(url, error="m")
-        qr.terminal(compact=True)
-        sys.stdout.flush()
-        png = grok_home / "mirror" / "pair.png"
-        png.parent.mkdir(parents=True, exist_ok=True)
-        qr.save(str(png), scale=6)
-        out(f"QR image: {png}")
-    except Exception:
-        out("(install segno for a terminal QR: pip install --user segno)")
-    out()
-    out("Pairing URL (contains a secret — do not commit or screenshot publicly):")
-    out(url)
+            qr = segno.make(url, error="m")
+            qr.terminal(compact=True)
+            sys.stdout.flush()
+            png = grok_home / "mirror" / "pair.png"
+            png.parent.mkdir(parents=True, exist_ok=True)
+            qr.save(str(png), scale=6)
+            out(f"QR image: {png}")
+        except Exception:
+            out("(install segno for a terminal QR: pip install --user segno)")
+        out()
+        out("Pairing URL (contains a secret — do not commit or screenshot publicly):")
+        out(url)
     out()
     out(f"Session: {args.session}")
-    out(f"LAN:     https://{host}:{args.port}")
+    out(f"Reach:   https://{host}:{args.port}")
     out(f"Pin:     sha256:{fingerprint}")
     out("Ctrl+C to stop. Leave this process running while you use the phone.")
     out()
@@ -92,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         session_id=args.session,
         session_dir=session_dir,
         cwd=Path(args.cwd).resolve(),
+        require_apple=args.require_apple,
+        apple_bind_path=grok_home / "mirror" / "apple_bind.json" if args.require_apple else None,
     )
     httpd = serve(state, cert, key, args.bind, args.port)
     try:
@@ -101,6 +128,13 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         httpd.server_close()
     return 0
+
+
+def _read_token_file(path: str) -> str | None:
+    raw = Path(path).read_text(encoding="utf-8").strip()
+    if 16 <= len(raw) <= 128 and "\n" not in raw and " " not in raw:
+        return raw
+    return None
 
 
 if __name__ == "__main__":
