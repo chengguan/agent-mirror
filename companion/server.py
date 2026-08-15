@@ -1,0 +1,155 @@
+"""Same-LAN HTTPS bridge. Auth is a pairing token; cert is pinned by the phone."""
+
+from __future__ import annotations
+
+import json
+import os
+import ssl
+import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+from companion.security import MAX_MESSAGE, token_matches, valid_message
+from companion.session_log import load_messages
+
+GROK_BIN = os.environ.get("GROK_BIN", str(Path.home() / ".grok/bin/grok"))
+
+
+class BridgeState:
+    def __init__(
+        self,
+        *,
+        token: str,
+        session_id: str,
+        session_dir: Path,
+        cwd: Path,
+    ) -> None:
+        self.token = token
+        self.session_id = session_id
+        self.session_dir = session_dir
+        self.cwd = cwd
+        self.lock = threading.Lock()
+        self.busy = False
+
+
+def make_handler(state: BridgeState):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt: str, *args: Any) -> None:
+            # M6: do not log Authorization or bodies.
+            sys_stderr = __import__("sys").stderr
+            sys_stderr.write("%s %s\n" % (self.command, self.path.split("?", 1)[0]))
+
+        def _unauthorized(self) -> None:
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"unauthorized"}')
+
+        def _bad(self, code: int, msg: str) -> None:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": msg}).encode("utf-8"))
+
+        def _ok(self, payload: Any) -> None:
+            raw = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _authorized(self) -> bool:
+            header = self.headers.get("Authorization", "")
+            if not header.startswith("Bearer "):
+                return False
+            return token_matches(state.token, header[7:].strip())
+
+        def do_GET(self) -> None:
+            path = urlparse(self.path).path
+            if path == "/v1/health":
+                # Unauthenticated liveness only — do not leak the session id.
+                self._ok({"ok": True})
+                return
+            if not self._authorized():
+                self._unauthorized()
+                return
+            if path == "/v1/messages":
+                self._ok({"messages": load_messages(state.session_dir)})
+                return
+            self._bad(404, "not found")
+
+        def do_POST(self) -> None:
+            if not self._authorized():
+                self._unauthorized()
+                return
+            path = urlparse(self.path).path
+            if path != "/v1/message":
+                self._bad(404, "not found")
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 0 or length > MAX_MESSAGE + 512:
+                self._bad(413, "too large")
+                return
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                self._bad(400, "invalid json")
+                return
+            text = str(body.get("text") or "")
+            if not valid_message(text):
+                self._bad(400, "invalid message")
+                return
+            with state.lock:
+                if state.busy:
+                    self._bad(409, "busy")
+                    return
+                state.busy = True
+            try:
+                result = subprocess.run(
+                    [
+                        GROK_BIN,
+                        "--resume",
+                        state.session_id,
+                        "--cwd",
+                        str(state.cwd),
+                        "--single",
+                        text,
+                        "--output-format",
+                        "plain",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                with state.lock:
+                    state.busy = False
+                self._bad(502, "grok failed")
+                return
+            with state.lock:
+                state.busy = False
+            if result.returncode != 0:
+                self._bad(502, "grok failed")
+                return
+            self._ok({"ok": True, "messages": load_messages(state.session_dir)})
+
+    return Handler
+
+
+def serve(
+    state: BridgeState,
+    cert: Path,
+    key: Path,
+    host: str,
+    port: int,
+) -> ThreadingHTTPServer:
+    httpd = ThreadingHTTPServer((host, port), make_handler(state))
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(str(cert), str(key))
+    httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+    return httpd
