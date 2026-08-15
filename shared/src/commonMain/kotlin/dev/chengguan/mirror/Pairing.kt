@@ -167,18 +167,48 @@ fun parseSnapshot(json: String): MirrorSnapshot =
 
 /** Strip TUI harness wrappers so bubbles show only the spoken line. */
 fun cleanChatText(raw: String): String {
-    var text = SYSTEM_REMINDER.replace(raw, "")
-    text = MONITOR_EVENT.replace(text) { match ->
-        var inner = match.groupValues[1].trim()
-        inner = WATCH_PREFIX.replace(inner, "")
-        if (inner.startsWith("MIRROR ", ignoreCase = true)) inner.substring(7) else inner
-    }
+    var text = stripTagged(raw, "system-reminder", keepInner = false)
+    text = stripTagged(text, "monitor-event", keepInner = true)
     return text.trim()
 }
 
-private val SYSTEM_REMINDER = Regex("<system-reminder\\b[\\s\\S]*?</system-reminder>", RegexOption.IGNORE_CASE)
-private val MONITOR_EVENT = Regex("<monitor-event\\b[^>]*>([\\s\\S]*?)</monitor-event>", RegexOption.IGNORE_CASE)
-private val WATCH_PREFIX = Regex("^\\[[^\\]]*\\]\\s*")
+private fun stripTagged(src: String, tag: String, keepInner: Boolean): String {
+    val open = "<$tag"
+    val close = "</$tag>"
+    val out = StringBuilder(src.length)
+    var i = 0
+    while (i < src.length) {
+        val start = src.indexOf(open, i, ignoreCase = true)
+        if (start < 0) {
+            out.append(src, i, src.length)
+            break
+        }
+        out.append(src, i, start)
+        val gt = src.indexOf('>', start)
+        if (gt < 0) {
+            out.append(src, start, src.length)
+            break
+        }
+        val end = src.indexOf(close, gt + 1, ignoreCase = true)
+        if (end < 0) {
+            out.append(src, start, src.length)
+            break
+        }
+        if (keepInner) {
+            var inner = src.substring(gt + 1, end).trim()
+            val bracket = inner.indexOf(']')
+            if (inner.startsWith("[") && bracket > 0) {
+                inner = inner.substring(bracket + 1).trim()
+            }
+            if (inner.startsWith("MIRROR ", ignoreCase = true)) {
+                inner = inner.substring(7)
+            }
+            out.append(inner.trim())
+        }
+        i = end + close.length
+    }
+    return out.toString()
+}
 
 private fun nextJsonObject(src: String, start: Int): Pair<Int, Int>? {
     val open = src.indexOf('{', start)

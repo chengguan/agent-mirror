@@ -98,23 +98,31 @@ class MirrorViewModel(
         val text = _state.value.draft.trim()
         if (text.isEmpty() || _state.value.sending) return
         viewModelScope.launch {
-            _state.value = _state.value.copy(sending = true, status = "Sending…")
-            apiFactory(pairing).send(text).fold(
-                onSuccess = { messages ->
-                    _state.value = _state.value.copy(
-                        sending = false,
-                        draft = "",
-                        messages = messages,
-                        status = null,
-                    )
-                },
-                onFailure = {
-                    _state.value = _state.value.copy(
-                        sending = false,
-                        status = "Could not send. Is the Mac companion still running on Wi-Fi?",
-                    )
-                },
+            val optimistic = _state.value.messages + ChatMessage("user", text)
+            _state.value = _state.value.copy(
+                sending = true,
+                draft = "",
+                messages = optimistic,
+                status = "Sending…",
             )
+            try {
+                apiFactory(pairing).send(text).fold(
+                    onSuccess = {
+                        _state.value = _state.value.copy(sending = false, status = null)
+                    },
+                    onFailure = {
+                        _state.value = _state.value.copy(
+                            sending = false,
+                            status = "Could not send. Is the Mac companion still running on Wi-Fi?",
+                        )
+                    },
+                )
+            } catch (_: Throwable) {
+                _state.value = _state.value.copy(
+                    sending = false,
+                    status = "Could not send. Is the Mac companion still running on Wi-Fi?",
+                )
+            }
         }
     }
 
@@ -126,12 +134,14 @@ class MirrorViewModel(
     private suspend fun refresh() {
         val pairing = _state.value.pairing ?: return
         if (_state.value.locked) return
-        apiFactory(pairing).pull().onSuccess { snap ->
-            _state.value = _state.value.copy(
-                messages = snap.messages,
-                sessionStatus = snap.status ?: _state.value.sessionStatus,
-                status = if (snap.status != null) null else _state.value.status,
-            )
+        runCatching {
+            apiFactory(pairing).pull().onSuccess { snap ->
+                _state.value = _state.value.copy(
+                    messages = snap.messages,
+                    sessionStatus = snap.status ?: _state.value.sessionStatus,
+                    status = if (snap.status != null) null else _state.value.status,
+                )
+            }
         }
     }
 

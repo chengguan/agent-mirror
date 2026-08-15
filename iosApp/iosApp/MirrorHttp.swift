@@ -35,17 +35,25 @@ final class PinnedCompanionClient: NSObject, IosHttpClient {
             req.httpBody = Data(body.utf8)
         }
         let task = session.dataTask(with: req) { data, response, error in
-            defer { session.invalidateAndCancel() }
-            if let error {
-                onResult(nil, "network")
-                return
+            let payload: String?
+            let fail: String?
+            if error != nil {
+                payload = nil
+                fail = "network"
+            } else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if (200...299).contains(code), let data {
+                    payload = String(data: data, encoding: .utf8) ?? ""
+                    fail = nil
+                } else {
+                    payload = nil
+                    fail = "http \(code)"
+                }
             }
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            guard (200...299).contains(code), let data else {
-                onResult(nil, "http \(code)")
-                return
+            DispatchQueue.main.async {
+                onResult(payload, fail)
+                session.finishTasksAndInvalidate()
             }
-            onResult(String(data: data, encoding: .utf8) ?? "", nil)
         }
         task.resume()
     }

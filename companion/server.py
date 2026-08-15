@@ -118,10 +118,8 @@ def make_handler(state: BridgeState):
             # and the phone Send button would stay disabled.
             if tui_owns_session():
                 append_inbox(grok_home(), state.session_id, text)
-                payload = _snapshot(state)
-                payload["ok"] = True
-                payload["queued"] = True
-                self._ok(payload)
+                # Do not echo the full thread — parsing it on Send crashed iOS.
+                self._ok({"ok": True, "queued": True, "status": _status(state)})
                 return
             with state.lock:
                 if state.busy:

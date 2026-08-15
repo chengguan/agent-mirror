@@ -49,13 +49,16 @@ class IosMirrorApi(private val pairing: Pairing) : MirrorApi {
             return@suspendCancellableCoroutine
         }
         val url = "https://${pairing.host}:${pairing.port}$path"
+        var resumed = false
         client.request(method, url, pairing.token, pairing.fingerprint, pairing.host, body) { payload, error ->
-            if (!continuation.isActive) return@request
-            if (error != null || payload == null) {
-                continuation.resume(Result.failure(IllegalStateException(error ?: "empty")))
+            if (resumed || !continuation.isActive) return@request
+            resumed = true
+            val result = if (error != null || payload == null) {
+                Result.failure(IllegalStateException(error ?: "empty"))
             } else {
-                continuation.resume(Result.success(runCatching { parseSnapshot(payload) }.getOrDefault(MirrorSnapshot(emptyList()))))
+                runCatching { parseSnapshot(payload) }.getOrElse { MirrorSnapshot(emptyList()) }.let { Result.success(it) }
             }
+            runCatching { continuation.resume(result) }
         }
     }
 }
