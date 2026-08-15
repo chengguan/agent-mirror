@@ -45,30 +45,34 @@ def main(argv: list[str] | None = None) -> int:
     host = lan_ip()
     url = pairing_url(host, args.port, args.session, token, fingerprint)
 
-    print()
-    print("Grok Mirror pairing (same Wi-Fi only)")
-    print("Scan this QR with the Mirror app, or the Camera app if the app is installed.")
-    print()
+    def out(msg: str = "") -> None:
+        print(msg, flush=True)
+
+    out()
+    out("Grok Mirror pairing (same Wi-Fi only)")
+    out("Scan this QR with the Mirror app, or the Camera app if the app is installed.")
+    out()
     try:
         import segno
 
         qr = segno.make(url, error="m")
         qr.terminal(compact=True)
+        sys.stdout.flush()
         png = grok_home / "mirror" / "pair.png"
         png.parent.mkdir(parents=True, exist_ok=True)
         qr.save(str(png), scale=6)
-        print(f"QR image: {png}")
+        out(f"QR image: {png}")
     except Exception:
-        print("(install segno for a terminal QR: pip install --user segno)")
-    print()
-    print("Pairing URL (contains a secret — do not commit or screenshot publicly):")
-    print(url)
-    print()
-    print(f"Session: {args.session}")
-    print(f"LAN:     https://{host}:{args.port}")
-    print(f"Pin:     sha256:{fingerprint}")
-    print("Ctrl+C to stop. Leave this process running while you use the phone.")
-    print()
+        out("(install segno for a terminal QR: pip install --user segno)")
+    out()
+    out("Pairing URL (contains a secret — do not commit or screenshot publicly):")
+    out(url)
+    out()
+    out(f"Session: {args.session}")
+    out(f"LAN:     https://{host}:{args.port}")
+    out(f"Pin:     sha256:{fingerprint}")
+    out("Ctrl+C to stop. Leave this process running while you use the phone.")
+    out()
 
     state = BridgeState(
         token=token,
