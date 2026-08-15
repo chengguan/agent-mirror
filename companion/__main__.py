@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         print(msg, flush=True)
 
     out()
-    out("Grok Mirror pairing (same Wi-Fi only)")
+    out("Grok Mirror pairing — v1.0 - private network edition")
     out("Scan this QR with the Mirror app, or the Camera app if the app is installed.")
     out()
     try:

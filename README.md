@@ -1,10 +1,12 @@
 # grok-mirror
 
-**Mirror** is an unofficial same-Wi-Fi companion: the Mac hosts this Grok
-Build session; the iPhone/Android app scans a QR and shows the thread so you
-can keep talking on the move.
+**Mirror** — **v1.0 - private network edition**
 
-Not an official xAI product. The Mac must stay on. v1 is LAN only.
+Unofficial same-Wi-Fi companion: the Mac hosts this Grok Build session; the
+iPhone/Android app scans a QR and shows the thread so you can keep talking
+on the move.
+
+Not an official xAI product. The Mac must stay on. v1 is private-network only.
 
 ## Pieces
 

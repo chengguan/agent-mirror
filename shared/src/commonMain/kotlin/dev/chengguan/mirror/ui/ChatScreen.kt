@@ -46,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import dev.chengguan.mirror.APP_NAME
+import dev.chengguan.mirror.APP_VERSION_LABEL
 import dev.chengguan.mirror.ChatMessage
 import dev.chengguan.mirror.ChatStyle
 import dev.chengguan.mirror.MirrorUiState
@@ -81,10 +83,10 @@ fun ChatScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Mirror", style = MaterialTheme.typography.headlineMedium)
+                Text(APP_NAME, style = MaterialTheme.typography.headlineMedium)
                 Text(
                     state.pairing?.let { "Session ${it.sessionId.take(8)}… · ${it.host}:${it.port}" }
-                        ?: "Not paired",
+                        ?: APP_VERSION_LABEL,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -123,7 +125,13 @@ private fun LockScreen(state: MirrorUiState, onUnlock: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Mirror", style = MaterialTheme.typography.headlineLarge)
+        Text(APP_NAME, style = MaterialTheme.typography.headlineLarge)
+        Text(
+            APP_VERSION_LABEL,
+            style = MaterialTheme.typography.titleSmall,
+            color = AccentCyan,
+            modifier = Modifier.padding(top = 8.dp),
+        )
         Text(
             "Unlock to open the pairing secret and this Grok thread. Same Wi-Fi only.",
             style = MaterialTheme.typography.bodyMedium,

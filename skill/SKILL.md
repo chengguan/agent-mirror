@@ -6,7 +6,7 @@ description: >
   grok-mirror, Mirror app, show the QR, or /grok-mirror.
 ---
 
-# Grok Mirror pairing
+# Grok Mirror pairing (v1.0 - private network edition)
 
 When the user wants to mirror **this** session to their phone:
 
