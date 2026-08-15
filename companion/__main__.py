@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         print(msg, flush=True)
 
     out()
-    out("Grok Mirror pairing — v2.0 - TailScale connectivity")
+    out("Grok Mirror pairing — v2.1 - minor bug fixes")
     if args.require_apple:
         out("Apple ID required — iPhone only. Android cannot pair. The QR does not contain your Apple ID.")
     if args.quiet:

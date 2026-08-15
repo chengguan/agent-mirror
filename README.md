@@ -1,6 +1,6 @@
 # grok-mirror
 
-**Mirror** — **v2.0 - TailScale connectivity**
+**Mirror** — **v2.1 - minor bug fixes**
 
 Unofficial companion: the Mac hosts this Grok Build session; the iPhone/Android
 app scans a QR and shows the thread so you can keep talking on the move.

@@ -6,7 +6,7 @@ description: >
   grok-mirror, Mirror app, show the QR, or /grok-mirror.
 ---
 
-# Grok Mirror pairing (v2.0 - TailScale connectivity)
+# Grok Mirror pairing (v2.1 - minor bug fixes)
 
 When the user wants to mirror **this** session to their phone:
 

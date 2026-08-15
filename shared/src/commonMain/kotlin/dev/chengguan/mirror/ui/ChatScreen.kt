@@ -1,7 +1,9 @@
 package dev.chengguan.mirror.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -20,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
@@ -37,7 +41,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -48,6 +61,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import dev.chengguan.mirror.APP_NAME
 import dev.chengguan.mirror.APP_VERSION_LABEL
+import dev.chengguan.mirror.copyToClipboard
 import dev.chengguan.mirror.ChatMessage
 import dev.chengguan.mirror.ChatStyle
 import dev.chengguan.mirror.MirrorUiState
@@ -71,10 +85,14 @@ fun ChatScreen(
         return
     }
 
+    val hideKeyboard = rememberHideKeyboard()
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { hideKeyboard() })
+            }
             .padding(horizontal = 16.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -206,6 +224,16 @@ private fun PairPane(status: String?, onApplyLink: (String) -> Unit) {
 }
 
 @Composable
+private fun rememberHideKeyboard(): () -> Unit {
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    return {
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
+    }
+}
+
+@Composable
 private fun ThreadPane(
     modifier: Modifier,
     messages: List<ChatMessage>,
@@ -219,6 +247,7 @@ private fun ThreadPane(
     onUnpair: () -> Unit,
     onToggleStatus: () -> Unit,
 ) {
+    val hideKeyboard = rememberHideKeyboard()
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -260,10 +289,19 @@ private fun ThreadPane(
             maxLines = 6,
             enabled = !sending,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            keyboardActions = KeyboardActions(onSend = {
+                hideKeyboard()
+                onSend()
+            }),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onSend, enabled = !sending && draft.isNotBlank()) {
+            Button(
+                onClick = {
+                    hideKeyboard()
+                    onSend()
+                },
+                enabled = !sending && draft.isNotBlank(),
+            ) {
                 Text(if (sending) "Sending…" else "Send")
             }
             OutlinedButton(onClick = onUnpair, enabled = !sending) { Text("Unpair") }
@@ -483,18 +521,62 @@ private fun MessageBubble(message: ChatMessage) {
                     Modifier.weight(1f).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        if (mine) "You" else "Grok",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accent,
-                    )
-                    Text(
-                        text = annotatedChat(message.text),
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            if (mine) "You" else "Grok",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accent,
+                        )
+                        CopyIconButton(onClick = { copyToClipboard(message.text) })
+                    }
+                    SelectionContainer {
+                        Text(
+                            text = annotatedChat(message.text),
+                            color = textColor,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CopyIconButton(onClick: () -> Unit) {
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .semantics {
+                contentDescription = "Copy"
+                role = Role.Button
+            }
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(14.dp)) {
+            val stroke = Stroke(width = size.minDimension * 0.12f, cap = StrokeCap.Round)
+            val inset = size.minDimension * 0.08f
+            val box = size.minDimension * 0.58f
+            drawRoundRect(
+                color = tint,
+                topLeft = androidx.compose.ui.geometry.Offset(inset, inset + box * 0.28f),
+                size = androidx.compose.ui.geometry.Size(box, box),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                style = stroke,
+            )
+            drawRoundRect(
+                color = tint,
+                topLeft = androidx.compose.ui.geometry.Offset(inset + box * 0.28f, inset),
+                size = androidx.compose.ui.geometry.Size(box, box),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                style = stroke,
+            )
         }
     }
 }
