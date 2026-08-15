@@ -21,16 +21,19 @@ actual fun platformMirrorApi(pairing: Pairing): MirrorApi = AndroidMirrorApi(pai
  */
 class AndroidMirrorApi(private val pairing: Pairing) : MirrorApi {
     override suspend fun fetchMessages(): Result<List<ChatMessage>> =
-        request("GET", "/v1/messages", null)
+        pull().map { it.messages }
 
     override suspend fun send(text: String): Result<List<ChatMessage>> =
-        request("POST", "/v1/message", """{"text":"${escapeJson(text)}"}""")
+        request("POST", "/v1/message", """{"text":"${escapeJson(text)}"}""").map { it.messages }
+
+    override suspend fun pull(): Result<MirrorSnapshot> =
+        request("GET", "/v1/messages", null)
 
     private suspend fun request(
         method: String,
         path: String,
         body: String?,
-    ): Result<List<ChatMessage>> = withContext(Dispatchers.IO) {
+    ): Result<MirrorSnapshot> = withContext(Dispatchers.IO) {
         runCatching {
             val url = URL("https://${pairing.host}:${pairing.port}$path")
             val conn = (url.openConnection() as HttpsURLConnection).apply {
@@ -55,7 +58,7 @@ class AndroidMirrorApi(private val pairing: Pairing) : MirrorApi {
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
                 val payload = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 if (code !in 200..299) error("http $code")
-                parseMessageList(payload)
+                parseSnapshot(payload)
             } finally {
                 conn.disconnect()
             }

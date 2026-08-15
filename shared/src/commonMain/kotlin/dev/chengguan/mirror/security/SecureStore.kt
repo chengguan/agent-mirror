@@ -10,3 +10,4 @@ interface SecureStore {
 expect fun platformSecureStore(): SecureStore
 
 const val PAIRING_KEY = "pairing.v1"
+const val STATUS_EXPANDED_KEY = "status.expanded.v1"

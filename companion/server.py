@@ -12,10 +12,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from companion.inbox import append_inbox, load_inbox, tui_owns_session
 from companion.security import MAX_MESSAGE, token_matches, valid_message
 from companion.session_log import load_messages
+from companion.status import live_status
 
 GROK_BIN = os.environ.get("GROK_BIN", str(Path.home() / ".grok/bin/grok"))
+
+
+def grok_home() -> Path:
+    return Path(os.environ.get("GROK_HOME", str(Path.home() / ".grok")))
 
 
 class BridgeState:
@@ -49,15 +55,17 @@ def make_handler(state: BridgeState):
             self.wfile.write(b'{"error":"unauthorized"}')
 
         def _bad(self, code: int, msg: str) -> None:
+            raw = _json_bytes({"error": msg})
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
-            self.wfile.write(json.dumps({"error": msg}).encode("utf-8"))
+            self.wfile.write(raw)
 
         def _ok(self, payload: Any) -> None:
-            raw = json.dumps(payload).encode("utf-8")
+            raw = _json_bytes(payload)
             self.send_response(200)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)
@@ -78,7 +86,10 @@ def make_handler(state: BridgeState):
                 self._unauthorized()
                 return
             if path == "/v1/messages":
-                self._ok({"messages": load_messages(state.session_dir)})
+                self._ok(_snapshot(state))
+                return
+            if path == "/v1/status":
+                self._ok({"status": _status(state)})
                 return
             self._bad(404, "not found")
 
@@ -102,6 +113,15 @@ def make_handler(state: BridgeState):
             text = str(body.get("text") or "")
             if not valid_message(text):
                 self._bad(400, "invalid message")
+                return
+            # A live TUI already owns this session; grok --resume would hang
+            # and the phone Send button would stay disabled.
+            if tui_owns_session():
+                append_inbox(grok_home(), state.session_id, text)
+                payload = _snapshot(state)
+                payload["ok"] = True
+                payload["queued"] = True
+                self._ok(payload)
                 return
             with state.lock:
                 if state.busy:
@@ -135,9 +155,29 @@ def make_handler(state: BridgeState):
             if result.returncode != 0:
                 self._bad(502, "grok failed")
                 return
-            self._ok({"ok": True, "messages": load_messages(state.session_dir)})
+            payload = _snapshot(state)
+            payload["ok"] = True
+            self._ok(payload)
 
     return Handler
+
+
+def _json_bytes(payload: Any) -> bytes:
+    # Keep apostrophes and other Unicode as UTF-8. ascii dumps turn ’ into
+    # \u2019, which the first phone parser showed as literal text.
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
+def _visible_messages(state: BridgeState) -> list:
+    return load_messages(state.session_dir) + load_inbox(grok_home(), state.session_id)
+
+
+def _status(state: BridgeState) -> dict:
+    return live_status(state.session_dir, grok_home(), state.session_id)
+
+
+def _snapshot(state: BridgeState) -> dict:
+    return {"messages": _visible_messages(state), "status": _status(state)}
 
 
 def serve(

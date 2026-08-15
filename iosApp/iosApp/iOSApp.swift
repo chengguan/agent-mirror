@@ -12,13 +12,13 @@ struct iOSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .onChange(of: scenePhase) { phase in
+                .onChange(of: scenePhase) { _, phase in
                     if phase != .active {
-                        MirrorSession.shared.onBackground?.invoke()
+                        MirrorSession.shared.onBackground?()
                     }
                 }
                 .onOpenURL { url in
-                    MirrorSession.shared.onLink?.invoke(url.absoluteString)
+                    MirrorSession.shared.onLink?(url.absoluteString)
                 }
         }
     }

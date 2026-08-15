@@ -6,40 +6,51 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-val Ink = Color(0xFF1A1714)
-val Amber = Color(0xFFB7791F)
-val Sand = Color(0xFFF4EFE6)
-val UserBubble = Color(0xFF2C3A4A)
-val AssistantBubble = Color(0xFFE8DFD0)
+// GrokNight — same slots as the default Grok Build TUI.
+val Ink = Color(0xFFE1E1E1)
+val AccentUser = Color(0xFFBB9AF7)
+val AccentAssistant = Color(0xFF7AA2F7)
+val AccentCyan = Color(0xFF1ABC9C)
+val AccentError = Color(0xFFF7768E)
+val AccentSuccess = Color(0xFF9ECE6A)
+val AccentWarn = Color(0xFFE0AF68)
+val BgBase = Color(0xFF0A0A0A)
+val BgRaised = Color(0xFF111111)
+val BgHighlight = Color(0xFF242424)
+val UserBubble = Color(0xFF16121F)
+val AssistantBubble = Color(0xFF111111)
 
 private val LightColors = lightColorScheme(
-    primary = Amber,
-    onPrimary = Color.White,
-    secondary = Ink,
-    onSecondary = Color.White,
-    background = Sand,
+    primary = AccentUser,
+    onPrimary = BgBase,
+    secondary = AccentAssistant,
+    onSecondary = BgBase,
+    background = BgBase,
     onBackground = Ink,
-    surface = Color.White,
+    surface = BgRaised,
     onSurface = Ink,
-    surfaceVariant = Color(0xFFE6DCCB),
-    onSurfaceVariant = Ink.copy(alpha = 0.72f),
-    error = Color(0xFFB42318),
+    surfaceVariant = BgHighlight,
+    onSurfaceVariant = Color(0xFFC8C8C8),
+    error = AccentError,
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFE0B15A),
-    onPrimary = Ink,
-    secondary = Color(0xFFE6DCCB),
-    background = Color(0xFF12110F),
-    onBackground = Color(0xFFF2EBE0),
-    surface = Color(0xFF1C1A17),
-    onSurface = Color(0xFFF2EBE0),
-    error = Color(0xFFE08A5C),
+    primary = AccentUser,
+    onPrimary = BgBase,
+    secondary = AccentAssistant,
+    onSecondary = BgBase,
+    background = BgBase,
+    onBackground = Ink,
+    surface = BgRaised,
+    onSurface = Ink,
+    surfaceVariant = BgHighlight,
+    onSurfaceVariant = Color(0xFFC8C8C8),
+    error = AccentError,
 )
 
 @Composable
 fun MirrorTheme(
-    darkTheme: Boolean = false,
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(

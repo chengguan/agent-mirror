@@ -3,8 +3,19 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+_MONITOR = re.compile(
+    r"<monitor-event\b[^>]*>(.*?)</monitor-event>",
+    re.DOTALL | re.IGNORECASE,
+)
+_SYSTEM = re.compile(
+    r"<system-reminder\b[^>]*>.*?</system-reminder>",
+    re.DOTALL | re.IGNORECASE,
+)
+_WATCH_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
 
 
 MAX_LINE = 256 * 1024
@@ -39,13 +50,13 @@ def load_messages(session_dir: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
 
     def flush_user() -> None:
-        text = "".join(user_buf).strip()
+        text = clean_visible_text("".join(user_buf)).strip()
         user_buf.clear()
         if text:
             out.append({"role": "user", "text": text[:MAX_TEXT]})
 
     def flush_agent() -> None:
-        text = "".join(agent_buf).strip()
+        text = clean_visible_text("".join(agent_buf)).strip()
         agent_buf.clear()
         if text:
             out.append({"role": "assistant", "text": text[:MAX_TEXT]})
@@ -85,3 +96,18 @@ def load_messages(session_dir: Path) -> list[dict[str, Any]]:
     if agent_buf:
         flush_agent()
     return out[-MAX_MESSAGES:]
+
+
+def clean_visible_text(raw: str) -> str:
+    """Drop harness wrappers so phone bubbles show only the spoken line."""
+    text = _SYSTEM.sub("", raw)
+
+    def unwrap(match: re.Match[str]) -> str:
+        inner = match.group(1).strip()
+        inner = _WATCH_PREFIX.sub("", inner)
+        if inner.upper().startswith("MIRROR "):
+            inner = inner[7:]
+        return inner.strip()
+
+    text = _MONITOR.sub(unwrap, text)
+    return text.strip()

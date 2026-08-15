@@ -27,16 +27,22 @@ actual fun platformMirrorApi(pairing: Pairing): MirrorApi = IosMirrorApi(pairing
 
 class IosMirrorApi(private val pairing: Pairing) : MirrorApi {
     override suspend fun fetchMessages(): Result<List<ChatMessage>> =
-        request("GET", "/v1/messages", null)
+        pull().map { it.messages }
 
     override suspend fun send(text: String): Result<List<ChatMessage>> =
+        sendSnapshot(text).map { it.messages }
+
+    override suspend fun pull(): Result<MirrorSnapshot> =
+        request("GET", "/v1/messages", null)
+
+    private suspend fun sendSnapshot(text: String): Result<MirrorSnapshot> =
         request("POST", "/v1/message", """{"text":"${escapeJson(text)}"}""")
 
     private suspend fun request(
         method: String,
         path: String,
         body: String?,
-    ): Result<List<ChatMessage>> = suspendCancellableCoroutine { continuation ->
+    ): Result<MirrorSnapshot> = suspendCancellableCoroutine { continuation ->
         val client = IosHttp.client
         if (client == null) {
             continuation.resume(Result.failure(IllegalStateException("http not installed")))
@@ -48,7 +54,7 @@ class IosMirrorApi(private val pairing: Pairing) : MirrorApi {
             if (error != null || payload == null) {
                 continuation.resume(Result.failure(IllegalStateException(error ?: "empty")))
             } else {
-                continuation.resume(Result.success(parseMessageList(payload)))
+                continuation.resume(Result.success(runCatching { parseSnapshot(payload) }.getOrDefault(MirrorSnapshot(emptyList()))))
             }
         }
     }

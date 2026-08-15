@@ -7,6 +7,7 @@ package dev.chengguan.mirror
 interface MirrorApi {
     suspend fun fetchMessages(): Result<List<ChatMessage>>
     suspend fun send(text: String): Result<List<ChatMessage>>
+    suspend fun pull(): Result<MirrorSnapshot> = fetchMessages().map { MirrorSnapshot(it) }
 }
 
 expect fun platformMirrorApi(pairing: Pairing): MirrorApi

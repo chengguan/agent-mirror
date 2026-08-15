@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.chengguan.mirror.security.AuthResult
 import dev.chengguan.mirror.security.DeviceAuthenticator
 import dev.chengguan.mirror.security.PAIRING_KEY
+import dev.chengguan.mirror.security.STATUS_EXPANDED_KEY
 import dev.chengguan.mirror.security.SecureStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,8 @@ data class MirrorUiState(
     val draft: String = "",
     val sending: Boolean = false,
     val status: String? = "Unlock, then scan the QR or paste the pairing URL.",
+    val sessionStatus: SessionStatus? = null,
+    val statusExpanded: Boolean = true,
 )
 
 class MirrorViewModel(
@@ -32,7 +35,10 @@ class MirrorViewModel(
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
-        MirrorUiState(canAuthenticate = authenticator.canAuthenticate),
+        MirrorUiState(
+            canAuthenticate = authenticator.canAuthenticate,
+            statusExpanded = store.read(STATUS_EXPANDED_KEY)?.decodeToString() != "0",
+        ),
     )
     val state: StateFlow<MirrorUiState> = _state.asStateFlow()
 
@@ -120,9 +126,19 @@ class MirrorViewModel(
     private suspend fun refresh() {
         val pairing = _state.value.pairing ?: return
         if (_state.value.locked) return
-        apiFactory(pairing).fetchMessages().onSuccess { messages ->
-            _state.value = _state.value.copy(messages = messages, status = null)
+        apiFactory(pairing).pull().onSuccess { snap ->
+            _state.value = _state.value.copy(
+                messages = snap.messages,
+                sessionStatus = snap.status ?: _state.value.sessionStatus,
+                status = if (snap.status != null) null else _state.value.status,
+            )
         }
+    }
+
+    fun toggleStatusExpanded() {
+        val next = !_state.value.statusExpanded
+        _state.value = _state.value.copy(statusExpanded = next)
+        store.write(STATUS_EXPANDED_KEY, (if (next) "1" else "0").encodeToByteArray())
     }
 
     fun unpair() {

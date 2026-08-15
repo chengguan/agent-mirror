@@ -86,22 +86,230 @@ private fun decodeQuery(value: String): String =
 
 data class ChatMessage(val role: String, val text: String)
 
+data class SessionStatus(
+    val phase: String,
+    val detail: String,
+    val model: String = "",
+    val inbox: Int = 0,
+    val tui: Boolean = false,
+    val usagePercent: Int = 0,
+    val tokensUsed: Int = 0,
+    val tokensWindow: Int = 0,
+    val turns: Int = 0,
+    val compactions: Int = 0,
+    val toolCalls: Int = 0,
+    val durationSeconds: Int = 0,
+    val tokensBeforeCompaction: Int = 0,
+)
+
+data class MirrorSnapshot(
+    val messages: List<ChatMessage>,
+    val status: SessionStatus? = null,
+)
+
+/**
+ * Linear scan — do not use Regex on the companion payload. Kotlin/Native
+ * Regex.findAll stack-overflows on a long session (this one crashed Pair).
+ */
 fun parseMessageList(json: String): List<ChatMessage> {
-    if (json.length > 2_000_000) return emptyList()
+    if (json.isEmpty()) return emptyList()
+    val src = if (json.length > 4_000_000) json.substring(json.length - 4_000_000) else json
     val out = ArrayList<ChatMessage>()
-    val regex = Regex(
-        """\{[^{}]*"role"\s*:\s*"(user|assistant)"[^{}]*"text"\s*:\s*"((?:\\.|[^"\\])*)"|\{[^{}]*"text"\s*:\s*"((?:\\.|[^"\\])*)"[^{}]*"role"\s*:\s*"(user|assistant)\"""",
-    )
-    for (m in regex.findAll(json)) {
-        val role = m.groupValues[1].ifEmpty { m.groupValues[4] }
-        val raw = m.groupValues[2].ifEmpty { m.groupValues[3] }
-        val text = unescapeJson(raw).take(16_384)
-        if (role.isNotEmpty() && text.isNotEmpty()) {
-            out.add(ChatMessage(role, text))
-        }
+    val messagesKey = src.indexOf("\"messages\"")
+    val arrayStart = if (messagesKey >= 0) src.indexOf('[', messagesKey) else -1
+    var i = if (arrayStart >= 0) arrayStart else 0
+    while (i < src.length) {
+        val range = nextJsonObject(src, i) ?: break
+        i = range.second + 1
+        val obj = src.substring(range.first, range.second + 1)
+        val role = jsonStringField(obj, "role") ?: continue
+        if (role != "user" && role != "assistant") continue
+        val text = jsonStringField(obj, "text")
+            ?.let { cleanChatText(unescapeJson(it)).take(16_384) } ?: continue
+        if (text.isNotEmpty()) out.add(ChatMessage(role, text))
     }
-    return out
+    return if (out.size > 2_000) out.takeLast(2_000) else out
 }
 
-private fun unescapeJson(raw: String): String =
-    raw.replace("\\n", "\n").replace("\\t", "\t").replace("\\\"", "\"").replace("\\\\", "\\")
+fun parseSessionStatus(json: String): SessionStatus? {
+    if (json.isEmpty()) return null
+    var at = json.lastIndexOf("\"phase\"")
+    while (at >= 0) {
+        val range = nextJsonObject(json, json.lastIndexOf('{', at).coerceAtLeast(0)) ?: break
+        val obj = json.substring(range.first, range.second + 1)
+        val phase = jsonStringField(obj, "phase")?.let(::unescapeJson)
+        if (phase != null && phase in setOf("idle", "thinking", "working", "queued")) {
+            val tuiRaw = jsonStringField(obj, "tui")
+            val tui = tuiRaw == "true" || obj.contains("\"tui\":true")
+            return SessionStatus(
+                phase = phase,
+                detail = jsonStringField(obj, "detail")?.let(::unescapeJson).orEmpty(),
+                model = jsonStringField(obj, "model")?.let(::unescapeJson).orEmpty(),
+                inbox = jsonIntField(obj, "inbox") ?: 0,
+                tui = tui,
+                usagePercent = jsonIntField(obj, "usage_percent") ?: 0,
+                tokensUsed = jsonIntField(obj, "tokens_used") ?: 0,
+                tokensWindow = jsonIntField(obj, "tokens_window") ?: 0,
+                turns = jsonIntField(obj, "turns") ?: 0,
+                compactions = jsonIntField(obj, "compactions") ?: 0,
+                toolCalls = jsonIntField(obj, "tool_calls") ?: 0,
+                durationSeconds = jsonIntField(obj, "duration_seconds") ?: 0,
+                tokensBeforeCompaction = jsonIntField(obj, "tokens_before_compaction") ?: 0,
+            )
+        }
+        at = json.lastIndexOf("\"phase\"", at - 1)
+    }
+    return null
+}
+
+fun parseSnapshot(json: String): MirrorSnapshot =
+    MirrorSnapshot(parseMessageList(json), parseSessionStatus(json))
+
+/** Strip TUI harness wrappers so bubbles show only the spoken line. */
+fun cleanChatText(raw: String): String {
+    var text = SYSTEM_REMINDER.replace(raw, "")
+    text = MONITOR_EVENT.replace(text) { match ->
+        var inner = match.groupValues[1].trim()
+        inner = WATCH_PREFIX.replace(inner, "")
+        if (inner.startsWith("MIRROR ", ignoreCase = true)) inner.substring(7) else inner
+    }
+    return text.trim()
+}
+
+private val SYSTEM_REMINDER = Regex("<system-reminder\\b[\\s\\S]*?</system-reminder>", RegexOption.IGNORE_CASE)
+private val MONITOR_EVENT = Regex("<monitor-event\\b[^>]*>([\\s\\S]*?)</monitor-event>", RegexOption.IGNORE_CASE)
+private val WATCH_PREFIX = Regex("^\\[[^\\]]*\\]\\s*")
+
+private fun nextJsonObject(src: String, start: Int): Pair<Int, Int>? {
+    val open = src.indexOf('{', start)
+    if (open < 0) return null
+    var depth = 0
+    var inString = false
+    var escape = false
+    for (j in open until src.length) {
+        val ch = src[j]
+        if (inString) {
+            when {
+                escape -> escape = false
+                ch == '\\' -> escape = true
+                ch == '"' -> inString = false
+            }
+            continue
+        }
+        when (ch) {
+            '"' -> inString = true
+            '{' -> depth++
+            '}' -> {
+                depth--
+                if (depth == 0) return open to j
+            }
+        }
+    }
+    return null
+}
+
+private fun jsonIntField(obj: String, name: String): Int? {
+    val key = "\"$name\""
+    val at = obj.indexOf(key)
+    if (at < 0) return null
+    var p = at + key.length
+    while (p < obj.length && (obj[p].isWhitespace() || obj[p] == ':')) p++
+    val start = p
+    while (p < obj.length && obj[p] in '0'..'9') p++
+    if (p == start) return null
+    return obj.substring(start, p).toIntOrNull()
+}
+
+private fun jsonStringField(obj: String, name: String): String? {
+    val key = "\"$name\""
+    var i = 0
+    while (i < obj.length) {
+        val at = obj.indexOf(key, i)
+        if (at < 0) return null
+        var colon = at + key.length
+        while (colon < obj.length && obj[colon].isWhitespace()) colon++
+        if (colon >= obj.length || obj[colon] != ':') {
+            i = at + 1
+            continue
+        }
+        var p = colon + 1
+        while (p < obj.length && obj[p].isWhitespace()) p++
+        if (p >= obj.length || obj[p] != '"') return null
+        return readJsonString(obj, p)
+    }
+    return null
+}
+
+private fun readJsonString(src: String, quoteIndex: Int): String? {
+    if (quoteIndex >= src.length || src[quoteIndex] != '"') return null
+    val out = StringBuilder()
+    var i = quoteIndex + 1
+    var escape = false
+    while (i < src.length) {
+        val ch = src[i]
+        if (escape) {
+            out.append(ch)
+            escape = false
+            i++
+            continue
+        }
+        when (ch) {
+            '\\' -> {
+                escape = true
+                out.append(ch)
+            }
+            '"' -> return out.toString()
+            else -> out.append(ch)
+        }
+        i++
+    }
+    return null
+}
+
+internal fun unescapeJson(raw: String): String = buildString(raw.length) {
+    var i = 0
+    while (i < raw.length) {
+        if (raw[i] != '\\' || i + 1 >= raw.length) {
+            append(raw[i])
+            i++
+            continue
+        }
+        when (raw[i + 1]) {
+            'n' -> { append('\n'); i += 2 }
+            't' -> { append('\t'); i += 2 }
+            'r' -> { append('\r'); i += 2 }
+            '"' -> { append('"'); i += 2 }
+            '\'' -> { append('\''); i += 2 }
+            '\\' -> { append('\\'); i += 2 }
+            '/' -> { append('/'); i += 2 }
+            'b' -> { append('\b'); i += 2 }
+            'f' -> { append('\u000C'); i += 2 }
+            'u' -> {
+                val code = parseHex4(raw, i + 2)
+                if (code == null) {
+                    append(raw[i])
+                    i++
+                } else {
+                    append(code.toChar())
+                    i += 6
+                    if (code in 0xD800..0xDBFF && i + 5 < raw.length && raw[i] == '\\' && raw[i + 1] == 'u') {
+                        val low = parseHex4(raw, i + 2)
+                        if (low != null && low in 0xDC00..0xDFFF) {
+                            append(low.toChar())
+                            i += 6
+                        }
+                    }
+                }
+            }
+            else -> {
+                append(raw[i])
+                i++
+            }
+        }
+    }
+}
+
+private fun parseHex4(raw: String, at: Int): Int? {
+    if (at + 3 >= raw.length) return null
+    return raw.substring(at, at + 4).toIntOrNull(16)
+}

@@ -1,21 +1,28 @@
 package dev.chengguan.mirror.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -24,14 +31,26 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import dev.chengguan.mirror.ChatMessage
+import dev.chengguan.mirror.ChatStyle
 import dev.chengguan.mirror.MirrorUiState
+import dev.chengguan.mirror.SessionStatus
+import dev.chengguan.mirror.parseInlineMarkdown
 
 @Composable
 fun ChatScreen(
@@ -42,6 +61,7 @@ fun ChatScreen(
     onApplyLink: (String) -> Unit,
     onUnpair: () -> Unit,
     onLock: () -> Unit,
+    onToggleStatus: () -> Unit = {},
 ) {
     if (state.locked) {
         LockScreen(state = state, onUnlock = onUnlock)
@@ -75,15 +95,19 @@ fun ChatScreen(
         if (state.pairing == null) {
             PairPane(status = state.status, onApplyLink = onApplyLink)
         } else {
+            UsageBar(state.sessionStatus)
             ThreadPane(
                 modifier = Modifier.weight(1f),
                 messages = state.messages,
                 draft = state.draft,
                 sending = state.sending,
                 status = state.status,
+                sessionStatus = state.sessionStatus,
+                statusExpanded = state.statusExpanded,
                 onDraft = onDraft,
                 onSend = onSend,
                 onUnpair = onUnpair,
+                onToggleStatus = onToggleStatus,
             )
         }
     }
@@ -152,9 +176,12 @@ private fun ThreadPane(
     draft: String,
     sending: Boolean,
     status: String?,
+    sessionStatus: SessionStatus?,
+    statusExpanded: Boolean,
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onUnpair: () -> Unit,
+    onToggleStatus: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
@@ -163,6 +190,7 @@ private fun ThreadPane(
         }
     }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatusCard(sessionStatus, sending, statusExpanded, onToggleStatus)
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -205,25 +233,221 @@ private fun ThreadPane(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
-    val mine = message.role == "user"
-    val align = if (mine) Alignment.CenterEnd else Alignment.CenterStart
-    val color = if (mine) UserBubble else AssistantBubble
-    val textColor = if (mine) Color.White else Ink
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = color,
-            modifier = Modifier.fillMaxWidth(0.92f),
+private fun UsageBar(sessionStatus: SessionStatus?) {
+    val usage = sessionStatus ?: return
+    if (usage.tokensWindow <= 0 && usage.usagePercent <= 0) return
+    var open by remember { mutableStateOf(false) }
+    val percent = usage.usagePercent.coerceIn(0, 100)
+    val barColor = when {
+        percent >= 85 -> AccentError
+        percent >= 70 -> AccentWarn
+        else -> AccentCyan
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().clickable { open = true },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    if (mine) "You" else "Grok",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = textColor.copy(alpha = 0.7f),
-                )
-                Text(message.text, color = textColor, style = MaterialTheme.typography.bodyMedium)
+            Text("Tokens", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$percent%", style = MaterialTheme.typography.labelSmall, color = barColor, fontWeight = FontWeight.SemiBold)
+        }
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier.fillMaxWidth().height(6.dp),
+            color = barColor,
+            trackColor = BgHighlight,
+        )
+    }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text("Usage") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Context window", fontWeight = FontWeight.SemiBold, color = AccentCyan)
+                    Text("${formatCount(usage.tokensUsed)} / ${formatCount(usage.tokensWindow)} tokens")
+                    Text("$percent% of this session’s window")
+                    Text("This session", fontWeight = FontWeight.SemiBold, color = AccentCyan)
+                    Text("Model: ${usage.model.ifBlank { "—" }}")
+                    Text("Turns: ${formatCount(usage.turns)}")
+                    Text("Tool calls: ${formatCount(usage.toolCalls)}")
+                    Text("Compactions: ${formatCount(usage.compactions)}")
+                    if (usage.tokensBeforeCompaction > 0) {
+                        Text("Tokens before last compaction: ${formatCount(usage.tokensBeforeCompaction)}")
+                    }
+                    if (usage.durationSeconds > 0) {
+                        Text("Duration: ${formatDuration(usage.durationSeconds)}")
+                    }
+                    Text(
+                        "Account credit from /usage is not stored on disk. This is the live context window the TUI uses.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { open = false }) { Text("Close") }
+            },
+        )
+    }
+}
+
+private fun formatCount(value: Int): String =
+    value.toString().reversed().chunked(3).joinToString(",").reversed()
+
+private fun formatDuration(seconds: Int): String {
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+}
+
+@Composable
+private fun StatusCard(
+    sessionStatus: SessionStatus?,
+    sending: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val phase = when {
+        sending -> "sending"
+        else -> sessionStatus?.phase ?: "unknown"
+    }
+    val detail = when {
+        sending -> "Sending your message…"
+        sessionStatus != null -> sessionStatus.detail.ifBlank { phaseLabel(phase) }
+        else -> "Waiting for companion status…"
+    }
+    val accent = when (phase) {
+        "working", "sending" -> AccentWarn
+        "thinking" -> AccentUser
+        "queued" -> AccentAssistant
+        "idle" -> AccentCyan
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val meta = buildString {
+        if (sessionStatus != null) {
+            if (sessionStatus.model.isNotEmpty()) append(sessionStatus.model)
+            append(if (isNotEmpty()) " · " else "")
+            append(if (sessionStatus.tui) "TUI live" else "TUI off")
+            if (sessionStatus.inbox > 0) append(" · inbox ${sessionStatus.inbox}")
+        }
+    }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = BgRaised,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
+    ) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(accent))
+            Column(
+                Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (expanded) "STATUS" else "STATUS · ${phaseLabel(phase)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent,
+                    )
+                    Text(
+                        if (expanded) "Hide" else "Show",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (expanded) {
+                    Text(phaseLabel(phase), color = accent, fontWeight = FontWeight.SemiBold)
+                    Text(detail, color = Ink, style = MaterialTheme.typography.bodySmall)
+                    if (meta.isNotEmpty()) {
+                        Text(
+                            meta,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+private fun phaseLabel(phase: String): String = when (phase) {
+    "idle" -> "Idle"
+    "thinking" -> "Thinking"
+    "working" -> "Working"
+    "queued" -> "Queued"
+    "sending" -> "Sending"
+    else -> "Unknown"
+}
+
+@Composable
+private fun MessageBubble(message: ChatMessage) {
+    val mine = message.role == "user"
+    val align = if (mine) Alignment.CenterEnd else Alignment.CenterStart
+    val accent = if (mine) AccentUser else AccentAssistant
+    val color = if (mine) UserBubble else AssistantBubble
+    val textColor = Ink
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = color,
+            modifier = Modifier.fillMaxWidth(0.92f),
+        ) {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                Box(
+                    Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(accent),
+                )
+                Column(
+                    Modifier.weight(1f).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        if (mine) "You" else "Grok",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent,
+                    )
+                    Text(
+                        text = annotatedChat(message.text),
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun annotatedChat(raw: String) = buildAnnotatedString {
+    for (run in parseInlineMarkdown(raw)) {
+        val span = when (run.style) {
+            ChatStyle.Bold -> SpanStyle(fontWeight = FontWeight.Bold)
+            ChatStyle.Italic -> SpanStyle(fontStyle = FontStyle.Italic)
+            ChatStyle.Code -> SpanStyle(fontFamily = FontFamily.Monospace, color = AccentCyan)
+            ChatStyle.Path -> SpanStyle(color = AccentCyan)
+            ChatStyle.Color -> SpanStyle(
+                color = chatColor(run.colorName),
+                fontWeight = FontWeight.SemiBold,
+            )
+            ChatStyle.Normal -> SpanStyle()
+        }
+        withStyle(span) { append(run.text) }
+    }
+}
+
+private fun chatColor(name: String?): Color = when (name) {
+    "red" -> AccentError
+    "amber" -> AccentWarn
+    "green" -> AccentSuccess
+    "blue" -> AccentAssistant
+    else -> Ink
 }

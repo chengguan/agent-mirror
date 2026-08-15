@@ -44,6 +44,7 @@ fun MirrorApp(incomingLink: String? = null) {
             onApplyLink = viewModel::applyLink,
             onUnpair = viewModel::unpair,
             onLock = viewModel::lock,
+            onToggleStatus = viewModel::toggleStatusExpanded,
         )
     }
 }

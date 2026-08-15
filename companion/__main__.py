@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from companion.security import (
 )
 from companion.server import BridgeState, serve
 from companion.session_log import find_session_dir
+from companion.watch import watch_inbox
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,14 +28,25 @@ def main(argv: list[str] | None = None) -> int:
     pair.add_argument("--port", type=int, default=8787)
     pair.add_argument("--grok-home", default=str(Path.home() / ".grok"))
     pair.add_argument("--bind", default="0.0.0.0", help="Same-LAN only; do not expose to the internet")
+    watch = sub.add_parser("watch", help="Print new inbox lines for the live TUI")
+    watch.add_argument("--session", required=True, help="Grok session id")
+    watch.add_argument("--grok-home", default=str(Path.home() / ".grok"))
+    watch.add_argument("--interval", type=float, default=0.25)
     args = parser.parse_args(argv)
 
+    if args.cmd == "watch":
+        if not valid_session_id(args.session):
+            print("invalid session id", file=sys.stderr)
+            return 2
+        watch_inbox(Path(args.grok_home), args.session, interval=args.interval)
+        return 0
     if args.cmd != "pair":
         return 2
     if not valid_session_id(args.session):
         print("invalid session id", file=sys.stderr)
         return 2
     grok_home = Path(args.grok_home)
+    os.environ["GROK_HOME"] = str(grok_home)
     session_dir = find_session_dir(grok_home, args.session)
     if session_dir is None:
         print("session not found under ~/.grok/sessions", file=sys.stderr)

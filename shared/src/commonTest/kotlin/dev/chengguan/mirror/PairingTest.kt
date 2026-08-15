@@ -64,6 +64,53 @@ class PairingTest {
     }
 
     @Test
+    fun stripsMonitorEventTags() {
+        val json =
+            """{"messages":[{"role":"user","text":"<monitor-event task_id=\"abc\">\n[Watch Mirror inbox for phone sends] MIRROR Hello from phone\n</monitor-event>"}]}"""
+        val messages = parseMessageList(json)
+        assertEquals(1, messages.size)
+        assertEquals("Hello from phone", messages[0].text)
+    }
+
+    @Test
+    fun parseMessageListEscapedQuotes() {
+        val json = """{"messages":[{"role":"user","text":"say \"hi\"\nnext"}]}"""
+        val messages = parseMessageList(json)
+        assertEquals(1, messages.size)
+        assertEquals("say \"hi\"\nnext", messages[0].text)
+    }
+
+    @Test
+    fun parseSessionStatusFromSnapshot() {
+        val json = """{"messages":[{"role":"user","text":"hi"}],"status":{"phase":"working","detail":"Reading file","model":"grok-4.6","inbox":0,"tui":true,"usage_percent":52,"tokens_used":262235,"tokens_window":500000}}"""
+        val status = parseSessionStatus(json)
+        assertNotNull(status)
+        assertEquals("working", status.phase)
+        assertEquals("Reading file", status.detail)
+        assertEquals("grok-4.6", status.model)
+        assertEquals(true, status.tui)
+        assertEquals(52, status.usagePercent)
+        assertEquals(262235, status.tokensUsed)
+    }
+
+    @Test
+    fun unescapeUnicodeApostrophe() {
+        assertEquals("don\u2019t", unescapeJson("don\\u2019t"))
+        assertEquals("'", unescapeJson("\\u0027"))
+        val json = """{"messages":[{"role":"assistant","text":"it\u2019s fine"}]}"""
+        val messages = parseMessageList(json)
+        assertEquals("it\u2019s fine", messages[0].text)
+    }
+
+    @Test
+    fun parseMessageListIgnoresBracesInsideStrings() {
+        val json = """{"messages":[{"role":"assistant","text":"use {this} object"}]}"""
+        val messages = parseMessageList(json)
+        assertEquals(1, messages.size)
+        assertEquals("use {this} object", messages[0].text)
+    }
+
+    @Test
     fun escapeJsonRoundTripShape() {
         val escaped = escapeJson("say \"hi\"\n\\")
         assertTrue(escaped.contains("\\\""))

@@ -22,7 +22,14 @@ Use the real session id and the workspace cwd. Bind stays on the LAN (`0.0.0.0:8
 
 3. Show the user the terminal QR (and `~/.grok/mirror/pair.png` if written). Tell them to scan it with the **Mirror** app, or with the system Camera if the app is installed (`grok-mirror://` URL).
 4. Leave the companion process running in the background so the phone can poll and send. Do not print the pairing token again later in logs.
-5. Phone messages are applied with `grok --resume <SESSION_ID> --single …` against the same session. If the TUI is also sending, warn that both writers can race.
+5. If this TUI is already running, the companion queues phone sends in `~/.grok/mirror/inbox/<SESSION_ID>.jsonl` instead of `grok --resume` (that would hang). After pairing, start a **persistent monitor** (do not print tokens):
+
+```bash
+cd ~/projects/grok-mirror
+PYTHONUNBUFFERED=1 python3 -m companion watch --session <SESSION_ID>
+```
+
+Each `MIRROR …` stdout line is a phone turn. Treat that text as the user's message and reply in this session (the phone polls the session log). Then drain the inbox so lines are not applied twice. Also drain any leftover inbox at the start of a normal TUI turn. If the TUI is not running, phone sends use `grok --resume <SESSION_ID> --single …`.
 
 Never disable ATS. Never invent a pairing protocol; this CLI is the source of truth.
 
