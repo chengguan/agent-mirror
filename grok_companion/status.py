@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from companion.billing import load_billing
-from companion.inbox import load_inbox
-from companion.inbox import tui_owns_session
+from grok_companion.billing import load_billing
+from grok_companion.inbox import load_inbox
+from grok_companion.inbox import tui_owns_session
 
 TAIL_BYTES = 128 * 1024
 

@@ -1,4 +1,4 @@
-from companion.security import is_tailscale_ipv4, pairing_url, valid_session_id
+from grok_companion.security import is_tailscale_ipv4, pairing_url, valid_session_id
 
 
 def test_pairing_url_shape():

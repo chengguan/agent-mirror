@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from companion.security import valid_session_id
+from grok_companion.security import valid_session_id
 
 
 def inbox_path(grok_home: Path, session_id: str) -> Path:
@@ -15,6 +15,10 @@ def inbox_path(grok_home: Path, session_id: str) -> Path:
 
 def append_inbox(grok_home: Path, session_id: str, text: str) -> None:
     if not valid_session_id(session_id):
+        return
+    existing = load_inbox(grok_home, session_id)
+    if existing and existing[-1].get("text") == text:
+        # Double tap / retried POST — do not queue the same line twice.
         return
     path = inbox_path(grok_home, session_id)
     path.parent.mkdir(parents=True, exist_ok=True)

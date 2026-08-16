@@ -11,7 +11,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-TAIL_BYTES = 256 * 1024
+# unified.jsonl is busy; billing events are infrequent. Search far enough
+# back that a quiet overnight does not hide the last /usage snapshot.
+TAIL_BYTES = 4 * 1024 * 1024
 BILLING_MSG = "billing: fetched credits config"
 
 

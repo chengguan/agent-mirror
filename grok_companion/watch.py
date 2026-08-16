@@ -6,8 +6,8 @@ import json
 import time
 from pathlib import Path
 
-from companion.inbox import inbox_path
-from companion.security import valid_session_id
+from grok_companion.inbox import inbox_path
+from grok_companion.security import valid_session_id
 
 
 class InboxTail:

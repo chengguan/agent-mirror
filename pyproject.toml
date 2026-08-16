@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grok-companion"
+version = "2.2.0"
+description = "Unofficial Mac companion that pairs a Grok Build session to the Mirror iOS/Android app"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Cheng Guan Teo" }]
+requires-python = ">=3.11"
+dependencies = [
+  "segno>=1.6.1",
+  "PyJWT[crypto]>=2.8",
+  "cryptography>=42.0",
+]
+keywords = ["grok", "mirror", "xai"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Communications",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+grok-companion = "grok_companion.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/chengguan/grok-mirror"
+Repository = "https://github.com/chengguan/grok-mirror"
+
+[tool.setuptools.packages.find]
+include = ["grok_companion*"]
+exclude = ["grok_companion.tests*"]

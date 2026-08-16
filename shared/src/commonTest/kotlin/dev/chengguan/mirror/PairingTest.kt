@@ -173,4 +173,12 @@ class PairingTest {
         assertTrue(!isLanIpv4("172.32.0.1"))
         assertTrue(!isLanIpv4("11.0.0.1"))
     }
+
+    @Test
+    fun collapseConsecutiveDuplicateUserTurns() {
+        val hello = ChatMessage("user", "hello")
+        val reply = ChatMessage("assistant", "hi")
+        val collapsed = collapseDuplicateUserTurns(listOf(hello, hello, reply, hello))
+        assertEquals(listOf(hello, reply, hello), collapsed)
+    }
 }

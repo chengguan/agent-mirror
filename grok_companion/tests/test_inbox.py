@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from companion.inbox import append_inbox, drain_inbox, load_inbox, tui_owns_session
-from companion.server import BridgeState, _json_bytes, _visible_messages
+from grok_companion.inbox import append_inbox, drain_inbox, load_inbox, tui_owns_session
+from grok_companion.server import BridgeState, _json_bytes, _merge_inbox, _visible_messages
 
 
 def test_inbox_roundtrip(tmp_path: Path, monkeypatch):
@@ -9,6 +9,14 @@ def test_inbox_roundtrip(tmp_path: Path, monkeypatch):
     sid = "01a003db-06b0-7a53-9d42-f263250c7890"
     append_inbox(tmp_path, sid, "It works")
     assert load_inbox(tmp_path, sid) == [{"role": "user", "text": "It works"}]
+
+
+def test_append_inbox_skips_consecutive_duplicate(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("GROK_HOME", str(tmp_path))
+    sid = "01a003db-06b0-7a53-9d42-f263250c7890"
+    append_inbox(tmp_path, sid, "same line")
+    append_inbox(tmp_path, sid, "same line")
+    assert load_inbox(tmp_path, sid) == [{"role": "user", "text": "same line"}]
 
 
 def test_visible_includes_inbox(tmp_path: Path, monkeypatch):
@@ -21,6 +29,20 @@ def test_visible_includes_inbox(tmp_path: Path, monkeypatch):
     state = BridgeState(token="t" * 32, session_id=sid, session_dir=log, cwd=tmp_path)
     messages = _visible_messages(state)
     assert messages[-1] == {"role": "user", "text": "from phone"}
+
+
+def test_merge_inbox_drops_session_duplicate(tmp_path: Path):
+    messages = [{"role": "user", "text": "from phone"}, {"role": "assistant", "text": "ok"}]
+    # last log line is assistant — a new same-text send must still show
+    merged = _merge_inbox(messages, [{"role": "user", "text": "from phone"}])
+    assert merged[-1] == {"role": "user", "text": "from phone"}
+    assert len(merged) == 3
+
+
+def test_merge_inbox_hides_pending_once_tui_recorded():
+    messages = [{"role": "assistant", "text": "hi"}, {"role": "user", "text": "from phone"}]
+    merged = _merge_inbox(messages, [{"role": "user", "text": "from phone"}])
+    assert merged == messages
 
 
 def test_drain_inbox_removes_file(tmp_path: Path, monkeypatch):
@@ -38,7 +60,8 @@ def test_tui_owns_ignores_resume(monkeypatch):
         stdout = (
             "grok --resume 01a003db --single hi --output-format plain\n"
             "/Users/chengguan/.grok/bin/grok --resume x --cwd /tmp --single y\n"
-            "python3 -m companion pair --session 01a003db\n"
+            "python3 -m grok_companion pair --session 01a003db\n"
+            "grok-companion pair --session 01a003db\n"
         )
         returncode = 0
 

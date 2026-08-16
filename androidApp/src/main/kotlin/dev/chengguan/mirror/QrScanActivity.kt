@@ -2,9 +2,13 @@ package dev.chengguan.mirror
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.util.Size
 import android.view.Gravity
@@ -12,7 +16,9 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -43,6 +49,19 @@ class QrScanActivity : FragmentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) startCamera() else fail(NO_PERMISSION)
+    }
+
+    private val albumLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        decodePairingQrFromUri(this, uri) { payload, error ->
+            if (payload != null) {
+                onPayload(payload)
+            } else {
+                hint.text = error ?: "No QR code in that photo."
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,18 +95,28 @@ class QrScanActivity : FragmentActivity() {
                 Gravity.TOP,
             )
         }
-        val cancel = Button(this).apply {
-            text = "Cancel"
-            setOnClickListener { cancelScan() }
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
             ).apply { bottomMargin = 64 }
         }
+        val photos = Button(this).apply {
+            text = "Choose from Photos"
+            setOnClickListener { albumLauncher.launch(pickImageRequest()) }
+        }
+        val cancel = Button(this).apply {
+            text = "Cancel"
+            setOnClickListener { cancelScan() }
+        }
+        actions.addView(photos)
+        actions.addView(cancel)
         root.addView(preview)
         root.addView(hint)
-        root.addView(cancel)
+        root.addView(actions)
         setContentView(root)
 
         when {
@@ -233,8 +262,75 @@ class AndroidQrScanHost(private val activity: FragmentActivity) : QrScanHost {
         }
     }
 
+    private val albumLauncher = activity.registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        val cb = pending
+        pending = null
+        if (uri == null) {
+            cb?.invoke(null, null)
+            return@registerForActivityResult
+        }
+        decodePairingQrFromUri(activity, uri) { payload, error ->
+            cb?.invoke(payload, error)
+        }
+    }
+
     override fun scan(onResult: (payload: String?, error: String?) -> Unit) {
         pending = onResult
         launcher.launch(Intent(activity, QrScanActivity::class.java))
+    }
+
+    override fun pickFromAlbum(onResult: (payload: String?, error: String?) -> Unit) {
+        pending = onResult
+        albumLauncher.launch(pickImageRequest())
+    }
+}
+
+private fun pickImageRequest() =
+    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+
+internal fun decodePairingQrFromUri(
+    context: Context,
+    uri: Uri,
+    onDone: (String?, String?) -> Unit,
+) {
+    val bitmap = runCatching { loadDownsampledBitmap(context, uri) }.getOrNull()
+    if (bitmap == null) {
+        onDone(null, "Could not read that photo.")
+        return
+    }
+    val scanner = BarcodeScanning.getClient(
+        BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build(),
+    )
+    scanner.process(InputImage.fromBitmap(bitmap, 0))
+        .addOnSuccessListener { barcodes ->
+            val values = barcodes.mapNotNull { it.rawValue?.trim()?.takeIf(String::isNotEmpty) }
+                .filter { it.length <= 2_000 }
+            val match = values.firstOrNull(::looksLikePairingPayload)
+            when {
+                match != null -> onDone(match, null)
+                values.isEmpty() -> onDone(null, "No QR code in that photo.")
+                else -> onDone(null, "That photo is not a Mirror pairing QR.")
+            }
+        }
+        .addOnFailureListener {
+            onDone(null, "Could not read a QR code in that photo.")
+        }
+        .addOnCompleteListener { scanner.close() }
+}
+
+private fun loadDownsampledBitmap(context: Context, uri: Uri): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    val longest = maxOf(bounds.outWidth, bounds.outHeight)
+    var sample = 1
+    while (longest / sample > 1_600) sample *= 2
+    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+    return context.contentResolver.openInputStream(uri)?.use {
+        BitmapFactory.decodeStream(it, null, opts)
     }
 }

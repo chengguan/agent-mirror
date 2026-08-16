@@ -111,14 +111,14 @@ class MirrorViewModel(
         val pairing = _state.value.pairing ?: return
         val text = _state.value.draft.trim()
         if (text.isEmpty() || _state.value.sending) return
+        val optimistic = collapseDuplicateUserTurns(_state.value.messages + ChatMessage("user", text))
+        _state.value = _state.value.copy(
+            sending = true,
+            draft = "",
+            messages = optimistic,
+            status = "Sending…",
+        )
         viewModelScope.launch {
-            val optimistic = _state.value.messages + ChatMessage("user", text)
-            _state.value = _state.value.copy(
-                sending = true,
-                draft = "",
-                messages = optimistic,
-                status = "Sending…",
-            )
             try {
                 apiFactory(pairing).send(text).fold(
                     onSuccess = {
@@ -159,7 +159,7 @@ class MirrorViewModel(
             }
             pulled.onSuccess { snap ->
                 _state.value = _state.value.copy(
-                    messages = snap.messages,
+                    messages = collapseDuplicateUserTurns(snap.messages),
                     sessionStatus = snap.status ?: _state.value.sessionStatus,
                     status = if (snap.status != null) null else _state.value.status,
                 )
@@ -232,3 +232,18 @@ fun encodePairing(pairing: Pairing): String =
     "grok-mirror://v1?host=${pairing.host}&port=${pairing.port}" +
         "&sid=${pairing.sessionId}&tok=${pairing.token}&fp=${pairing.fingerprint}" +
         if (pairing.requireApple) "&apple=1" else ""
+
+/** Inbox + session log can both carry the live phone turn. Collapse only
+ *  consecutive identical user lines so a later repeat still shows. */
+fun collapseDuplicateUserTurns(messages: List<ChatMessage>): List<ChatMessage> {
+    if (messages.size < 2) return messages
+    val out = ArrayList<ChatMessage>(messages.size)
+    for (message in messages) {
+        val prev = out.lastOrNull()
+        if (prev != null && prev.role == "user" && message.role == "user" && prev.text == message.text) {
+            continue
+        }
+        out.add(message)
+    }
+    return out
+}

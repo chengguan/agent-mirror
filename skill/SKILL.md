@@ -6,7 +6,7 @@ description: >
   grok-mirror, Mirror app, show the QR, or /grok-mirror.
 ---
 
-# Grok Mirror pairing (v2.1 - minor bug fixes)
+# Grok Mirror pairing (v2.2 - settings, album QR, grok-companion)
 
 When the user wants to mirror **this** session to their phone:
 
@@ -15,13 +15,13 @@ When the user wants to mirror **this** session to their phone:
 
 ```bash
 cd ~/projects/grok-mirror
-python3 -m companion pair --session <SESSION_ID> --cwd <WORKSPACE>
+python3 -m grok_companion pair --session <SESSION_ID> --cwd <WORKSPACE>
 ```
 
 If they asked to lock the QR to their Apple ID (iPhone only; Android is rejected):
 
 ```bash
-python3 -m companion pair --session <SESSION_ID> --cwd <WORKSPACE> --require-apple
+python3 -m grok_companion pair --session <SESSION_ID> --cwd <WORKSPACE> --require-apple
 ```
 
 The QR carries `apple=1` only — never an Apple ID or email. After scan, Mirror runs Sign in with Apple; the companion verifies Apple’s JWT and binds that `sub`. A stolen QR on another Apple ID (or any Android) is refused.
@@ -34,7 +34,7 @@ Use the real session id and the workspace cwd. Bind stays on the LAN (`0.0.0.0:8
 
 ```bash
 cd ~/projects/grok-mirror
-PYTHONUNBUFFERED=1 python3 -m companion watch --session <SESSION_ID>
+PYTHONUNBUFFERED=1 python3 -m grok_companion watch --session <SESSION_ID>
 ```
 
 Each `MIRROR …` stdout line is a phone turn. Treat that text as the user's message and reply in this session (the phone polls the session log). Then drain the inbox so lines are not applied twice. Also drain any leftover inbox at the start of a normal TUI turn. If the TUI is not running, phone sends use `grok --resume <SESSION_ID> --single …`.

@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from companion.apple import DEFAULT_AUDIENCE, verify_apple_identity_token
-from companion.inbox import append_inbox, load_inbox, tui_owns_session
-from companion.security import MAX_MESSAGE, token_matches, valid_message
-from companion.session_log import load_messages
-from companion.status import live_status
+from grok_companion.apple import DEFAULT_AUDIENCE, verify_apple_identity_token
+from grok_companion.inbox import append_inbox, load_inbox, tui_owns_session
+from grok_companion.security import MAX_MESSAGE, token_matches, valid_message
+from grok_companion.session_log import load_messages
+from grok_companion.status import live_status
 
 GROK_BIN = os.environ.get("GROK_BIN", str(Path.home() / ".grok/bin/grok"))
 
@@ -240,7 +240,28 @@ def _json_bytes(payload: Any) -> bytes:
 
 
 def _visible_messages(state: BridgeState) -> list:
-    return load_messages(state.session_dir) + load_inbox(grok_home(), state.session_id)
+    return _merge_inbox(
+        load_messages(state.session_dir),
+        load_inbox(grok_home(), state.session_id),
+    )
+
+
+def _merge_inbox(messages: list, inbox: list) -> list:
+    """Inbox is the live phone turn. Once the TUI has written that same user
+    line into the session log, do not append it again (duplicate bubbles)."""
+    if not inbox:
+        return messages
+    out = list(messages)
+    for item in inbox:
+        last = out[-1] if out else None
+        if (
+            last
+            and last.get("role") == "user"
+            and last.get("text") == item.get("text")
+        ):
+            continue
+        out.append(item)
+    return out
 
 
 def _status(state: BridgeState) -> dict:

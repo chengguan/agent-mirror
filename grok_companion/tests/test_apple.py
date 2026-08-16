@@ -5,9 +5,9 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-from companion.apple import verify_apple_identity_token
-from companion.security import pairing_url
-from companion.server import BridgeState, _load_apple_bind, _save_apple_bind
+from grok_companion.apple import verify_apple_identity_token
+from grok_companion.security import pairing_url
+from grok_companion.server import BridgeState, _load_apple_bind, _save_apple_bind
 
 
 def _rsa_and_jwk():

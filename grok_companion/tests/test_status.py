@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from companion.status import classify, live_status
+from grok_companion.status import classify, live_status
 
 
 def test_classify_working_and_idle():

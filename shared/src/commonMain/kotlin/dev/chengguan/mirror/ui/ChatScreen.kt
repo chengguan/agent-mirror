@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -59,12 +61,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import dev.chengguan.mirror.APP_AUTHOR
+import dev.chengguan.mirror.APP_AUTHOR_GITHUB
 import dev.chengguan.mirror.APP_NAME
+import dev.chengguan.mirror.APP_REPO_URL
 import dev.chengguan.mirror.APP_VERSION_LABEL
 import dev.chengguan.mirror.copyToClipboard
 import dev.chengguan.mirror.ChatMessage
 import dev.chengguan.mirror.ChatStyle
 import dev.chengguan.mirror.MirrorUiState
+import dev.chengguan.mirror.Pairing
 import dev.chengguan.mirror.QrScanner
 import dev.chengguan.mirror.SessionStatus
 import dev.chengguan.mirror.parseInlineMarkdown
@@ -86,6 +92,9 @@ fun ChatScreen(
     }
 
     val hideKeyboard = rememberHideKeyboard()
+    var settingsOpen by remember { mutableStateOf(false) }
+    var sessionOpen by remember { mutableStateOf(false) }
+    var aboutOpen by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -110,7 +119,34 @@ fun ChatScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onLock) { Text("Lock") }
+            TextButton(onClick = { settingsOpen = true }) { Text("Settings") }
+        }
+        if (settingsOpen) {
+            SettingsDialog(
+                onDismiss = { settingsOpen = false },
+                onLock = {
+                    settingsOpen = false
+                    onLock()
+                },
+                onSession = {
+                    settingsOpen = false
+                    sessionOpen = true
+                },
+                onAbout = {
+                    settingsOpen = false
+                    aboutOpen = true
+                },
+            )
+        }
+        if (sessionOpen) {
+            SessionInfoDialog(
+                pairing = state.pairing,
+                sessionStatus = state.sessionStatus,
+                onDismiss = { sessionOpen = false },
+            )
+        }
+        if (aboutOpen) {
+            AboutDialog(onDismiss = { aboutOpen = false })
         }
 
         if (state.pairing == null) {
@@ -171,53 +207,184 @@ private fun LockScreen(state: MirrorUiState, onUnlock: () -> Unit) {
 }
 
 @Composable
+private fun SettingsDialog(
+    onDismiss: () -> Unit,
+    onLock: () -> Unit,
+    onSession: () -> Unit,
+    onAbout: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Settings") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onLock, modifier = Modifier.fillMaxWidth()) { Text("Lock") }
+                OutlinedButton(onClick = onSession, modifier = Modifier.fillMaxWidth()) { Text("Session") }
+                OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text("About") }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
+private fun SessionInfoDialog(
+    pairing: Pairing?,
+    sessionStatus: SessionStatus?,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Session") },
+        text = {
+            SelectionContainer {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (pairing == null) {
+                        Text("Not paired. Scan a QR or paste a pairing URL.")
+                    } else {
+                        Text("Session ID", style = MaterialTheme.typography.labelSmall)
+                        Text(pairing.sessionId, fontFamily = FontFamily.Monospace)
+                        Text("Companion", style = MaterialTheme.typography.labelSmall)
+                        Text("${pairing.host}:${pairing.port}")
+                        Text("Apple ID lock", style = MaterialTheme.typography.labelSmall)
+                        Text(if (pairing.requireApple) "Required" else "Off")
+                        Text("Cert pin", style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            "sha256:${pairing.fingerprint.take(16)}…",
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    sessionStatus?.let { usage ->
+                        Text("Status", style = MaterialTheme.typography.labelSmall)
+                        Text(phaseLabel(usage.phase))
+                        if (usage.detail.isNotBlank()) Text(usage.detail)
+                        if (usage.model.isNotEmpty()) {
+                            Text("Model", style = MaterialTheme.typography.labelSmall)
+                            Text(usage.model)
+                        }
+                        Text("TUI", style = MaterialTheme.typography.labelSmall)
+                        Text(if (usage.tui) "Live" else "Off")
+                        if (usage.inbox > 0) Text("Inbox: ${usage.inbox}")
+                        if (usage.billing || usage.billingKind.isNotEmpty()) {
+                            Text("Usage", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                buildString {
+                                    append("${usage.usagePercent}%")
+                                    if (usage.billingKind.isNotEmpty()) append(" · ${usage.billingKind}")
+                                    if (usage.subscriptionTier.isNotEmpty()) append(" · ${usage.subscriptionTier}")
+                                    if (usage.billingResets.isNotEmpty()) append(" · resets ${usage.billingResets}")
+                                },
+                            )
+                        }
+                        if (usage.tokensWindow > 0) {
+                            Text("Context", style = MaterialTheme.typography.labelSmall)
+                            Text("${formatCount(usage.tokensUsed)} / ${formatCount(usage.tokensWindow)} (${usage.contextPercent}%)")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("About") },
+        text = {
+            SelectionContainer {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(APP_NAME, style = MaterialTheme.typography.titleMedium)
+                    Text(APP_VERSION_LABEL)
+                    Text("Author", style = MaterialTheme.typography.labelSmall)
+                    Text(APP_AUTHOR)
+                    Text("GitHub", style = MaterialTheme.typography.labelSmall)
+                    Text("$APP_AUTHOR_GITHUB · $APP_REPO_URL")
+                    Text(
+                        "Unofficial companion. Not an xAI product.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
 private fun PairPane(status: String?, onApplyLink: (String) -> Unit) {
     var draft by remember { mutableStateOf("") }
-    var scanning by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf<String?>(null) }
     var scanStatus by remember { mutableStateOf<String?>(null) }
+    fun startQr(fromAlbum: Boolean) {
+        val host = QrScanner.host
+        if (host == null) {
+            scanStatus = if (fromAlbum) {
+                "Photo picker is not available on this build."
+            } else {
+                "Camera scanner is not available on this build."
+            }
+            return
+        }
+        if (busy != null) return
+        busy = if (fromAlbum) "album" else "camera"
+        scanStatus = null
+        val onResult: (String?, String?) -> Unit = { payload, error ->
+            busy = null
+            if (payload != null) {
+                val clipped = payload.trim().take(2_000)
+                draft = clipped
+                onApplyLink(clipped)
+            } else if (!error.isNullOrBlank()) {
+                scanStatus = error
+            }
+        }
+        if (fromAlbum) host.pickFromAlbum(onResult) else host.scan(onResult)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            "Scan the pairing QR with the camera, or paste the pairing URL from the Mac companion.",
+            "Scan the pairing QR with the camera, choose a QR photo from your album, or paste the pairing URL from the Mac companion.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Button(
-            onClick = {
-                val host = QrScanner.host
-                if (host == null) {
-                    scanStatus = "Camera scanner is not available on this build."
-                    return@Button
-                }
-                if (scanning) return@Button
-                scanning = true
-                scanStatus = null
-                host.scan { payload, error ->
-                    scanning = false
-                    if (payload != null) {
-                        val clipped = payload.trim().take(2_000)
-                        draft = clipped
-                        onApplyLink(clipped)
-                    } else if (!error.isNullOrBlank()) {
-                        scanStatus = error
-                    }
-                }
-            },
-            enabled = !scanning,
+            onClick = { startQr(fromAlbum = false) },
+            enabled = busy == null,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (scanning) "Opening camera…" else "Scan QR") }
+        ) { Text(if (busy == "camera") "Opening camera…" else "Scan QR") }
+        OutlinedButton(
+            onClick = { startQr(fromAlbum = true) },
+            enabled = busy == null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (busy == "album") "Opening Photos…" else "Choose from Photos") }
         OutlinedTextField(
             value = draft,
             onValueChange = { if (it.length <= 2_000) draft = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Pairing URL") },
             singleLine = true,
-            enabled = !scanning,
+            enabled = busy == null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onApplyLink(draft) }),
         )
         OutlinedButton(
             onClick = { onApplyLink(draft) },
-            enabled = !scanning && draft.isNotBlank(),
+            enabled = busy == null && draft.isNotBlank(),
         ) { Text("Pair") }
         (scanStatus ?: status)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
