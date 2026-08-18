@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grok-companion"
-version = "2.2.0"
+version = "3.0.0"
 description = "Unofficial Mac companion that pairs a Grok Build session to the Mirror iOS/Android app"
 readme = "README.md"
 license = { text = "MIT" }

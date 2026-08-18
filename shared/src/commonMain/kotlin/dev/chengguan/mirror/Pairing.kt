@@ -129,6 +129,7 @@ data class SessionStatus(
     val billingKind: String = "",
     val billingResets: String = "",
     val subscriptionTier: String = "",
+    val hostname: String = "",
 )
 
 data class MirrorSnapshot(
@@ -189,6 +190,7 @@ fun parseSessionStatus(json: String): SessionStatus? {
                 billingKind = jsonStringField(obj, "billing_kind")?.let(::unescapeJson).orEmpty(),
                 billingResets = jsonStringField(obj, "billing_resets")?.let(::unescapeJson).orEmpty(),
                 subscriptionTier = jsonStringField(obj, "subscription_tier")?.let(::unescapeJson).orEmpty(),
+                hostname = jsonStringField(obj, "hostname")?.let(::unescapeJson).orEmpty(),
             )
         }
         at = json.lastIndexOf("\"phase\"", at - 1)

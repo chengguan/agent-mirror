@@ -211,7 +211,22 @@ def make_handler(state: BridgeState):
 
 
 def _load_apple_bind(path: Path | None, session_id: str) -> str | None:
-    if path is None or not path.is_file():
+    if path is None:
+        return None
+    loaded = _read_apple_bind_file(path, session_id)
+    if loaded:
+        return loaded
+    legacy = path.parent / "apple_bind.json"
+    if legacy == path or not legacy.is_file():
+        return None
+    loaded = _read_apple_bind_file(legacy, session_id)
+    if loaded:
+        _save_apple_bind(path, session_id, loaded)
+    return loaded
+
+
+def _read_apple_bind_file(path: Path, session_id: str) -> str | None:
+    if not path.is_file():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -278,10 +293,16 @@ def serve(
     key: Path,
     host: str,
     port: int,
+    listen_sock=None,
 ) -> ThreadingHTTPServer:
-    httpd = ThreadingHTTPServer((host, port), make_handler(state))
+    httpd = ThreadingHTTPServer((host, port), make_handler(state), bind_and_activate=False)
+    if listen_sock is not None:
+        httpd.socket = listen_sock
+    else:
+        httpd.server_bind()
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(str(cert), str(key))
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+    httpd.server_activate()
     return httpd

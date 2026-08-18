@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,6 +63,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.chengguan.mirror.ADD_TAB_ID
 import dev.chengguan.mirror.APP_AUTHOR
 import dev.chengguan.mirror.APP_AUTHOR_GITHUB
 import dev.chengguan.mirror.APP_NAME
@@ -72,6 +76,7 @@ import dev.chengguan.mirror.ChatStyle
 import dev.chengguan.mirror.MirrorUiState
 import dev.chengguan.mirror.Pairing
 import dev.chengguan.mirror.QrScanner
+import dev.chengguan.mirror.SessionRecord
 import dev.chengguan.mirror.SessionStatus
 import dev.chengguan.mirror.parseInlineMarkdown
 
@@ -82,9 +87,16 @@ fun ChatScreen(
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
     onApplyLink: (String) -> Unit,
-    onUnpair: () -> Unit,
+    onSelectSession: (String) -> Unit,
+    onStartRename: (String) -> Unit,
+    onCancelRename: () -> Unit,
+    onRename: (String, String) -> Unit,
+    onRequestUnpair: () -> Unit,
+    onConfirmUnpair: (Boolean) -> Unit,
+    onCancelUnpair: () -> Unit,
     onLock: () -> Unit,
     onToggleStatus: () -> Unit = {},
+    onToggleBackgroundRefresh: () -> Unit = {},
 ) {
     if (state.locked) {
         LockScreen(state = state, onUnlock = onUnlock)
@@ -95,6 +107,7 @@ fun ChatScreen(
     var settingsOpen by remember { mutableStateOf(false) }
     var sessionOpen by remember { mutableStateOf(false) }
     var aboutOpen by remember { mutableStateOf(false) }
+    val showPair = state.adding || (!state.archived && state.pairing == null)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -113,16 +126,33 @@ fun ChatScreen(
             Column(Modifier.weight(1f)) {
                 Text(APP_NAME, style = MaterialTheme.typography.headlineMedium)
                 Text(
-                    state.pairing?.let { "Session ${it.sessionId.take(8)}… · ${it.host}:${it.port}" }
-                        ?: APP_VERSION_LABEL,
+                    when {
+                        state.archived -> "Saved conversation"
+                        state.pairing != null ->
+                            "${state.sessions.firstOrNull { it.id == state.activeId }?.name ?: "Session"} · ${state.pairing.host}:${state.pairing.port}"
+                        else -> APP_VERSION_LABEL
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = { settingsOpen = true }) { Text("Settings") }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                if (!showPair) {
+                    DisconnectIconButton(
+                        archived = state.archived,
+                        enabled = !state.sending,
+                        onClick = onRequestUnpair,
+                    )
+                }
+                SettingsIconButton(onClick = { settingsOpen = true })
+            }
         }
         if (settingsOpen) {
             SettingsDialog(
+                backgroundRefresh = state.backgroundRefresh,
                 onDismiss = { settingsOpen = false },
                 onLock = {
                     settingsOpen = false
@@ -136,35 +166,64 @@ fun ChatScreen(
                     settingsOpen = false
                     aboutOpen = true
                 },
+                onToggleBackgroundRefresh = onToggleBackgroundRefresh,
             )
         }
         if (sessionOpen) {
             SessionInfoDialog(
                 pairing = state.pairing,
                 sessionStatus = state.sessionStatus,
+                archived = state.archived,
                 onDismiss = { sessionOpen = false },
             )
         }
         if (aboutOpen) {
             AboutDialog(onDismiss = { aboutOpen = false })
         }
+        if (state.pendingUnpairId != null) {
+            UnpairDialog(
+                archived = state.sessions.firstOrNull { it.id == state.pendingUnpairId }?.archived == true,
+                onSave = { onConfirmUnpair(true) },
+                onDiscard = { onConfirmUnpair(false) },
+                onCancel = onCancelUnpair,
+            )
+        }
+        state.renamingId?.let { renameId ->
+            RenameDialog(
+                current = state.sessions.firstOrNull { it.id == renameId }?.name.orEmpty(),
+                onConfirm = { onRename(renameId, it) },
+                onCancel = onCancelRename,
+            )
+        }
 
-        if (state.pairing == null) {
+        if (showPair) {
+            SessionTabs(
+                sessions = state.sessions,
+                activeId = if (state.adding) ADD_TAB_ID else state.activeId,
+                onSelect = onSelectSession,
+                onRename = onStartRename,
+            )
             PairPane(status = state.status, onApplyLink = onApplyLink)
         } else {
-            UsageBar(state.sessionStatus)
+            if (!state.archived) UsageBar(state.sessionStatus)
             ThreadPane(
                 modifier = Modifier.weight(1f),
                 messages = state.messages,
                 draft = state.draft,
                 sending = state.sending,
+                archived = state.archived,
                 status = state.status,
                 sessionStatus = state.sessionStatus,
                 statusExpanded = state.statusExpanded,
                 onDraft = onDraft,
                 onSend = onSend,
-                onUnpair = onUnpair,
                 onToggleStatus = onToggleStatus,
+            )
+            SessionTabs(
+                sessions = state.sessions,
+                activeId = state.activeId,
+                onSelect = onSelectSession,
+                onRename = onStartRename,
             )
         }
     }
@@ -172,46 +231,44 @@ fun ChatScreen(
 
 @Composable
 private fun LockScreen(state: MirrorUiState, onUnlock: () -> Unit) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(28.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 28.dp, vertical = 24.dp),
     ) {
-        Text(APP_NAME, style = MaterialTheme.typography.headlineLarge)
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Text(
+                APP_NAME,
+                color = Color.White,
+                fontSize = 40.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Button(onClick = onUnlock, enabled = !state.authenticating) {
+                Text(if (state.authenticating) "Waiting…" else "Unlock")
+            }
+        }
         Text(
             APP_VERSION_LABEL,
-            style = MaterialTheme.typography.titleSmall,
-            color = AccentCyan,
-            modifier = Modifier.padding(top = 8.dp),
+            color = Color(0xFFC8C8C8),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
-        Text(
-            "Unlock to open the pairing secret and this Grok thread. Same Wi-Fi only.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
-        )
-        Button(onClick = onUnlock, enabled = !state.authenticating) {
-            Text(if (state.authenticating) "Waiting…" else "Unlock")
-        }
-        state.status?.let {
-            Text(
-                it,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 16.dp),
-            )
-        }
     }
 }
 
 @Composable
 private fun SettingsDialog(
+    backgroundRefresh: Boolean,
     onDismiss: () -> Unit,
     onLock: () -> Unit,
     onSession: () -> Unit,
     onAbout: () -> Unit,
+    onToggleBackgroundRefresh: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -223,6 +280,17 @@ private fun SettingsDialog(
             ) {
                 Button(onClick = onLock, modifier = Modifier.fillMaxWidth()) { Text("Lock") }
                 OutlinedButton(onClick = onSession, modifier = Modifier.fillMaxWidth()) { Text("Session") }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Background refresh")
+                    Switch(
+                        checked = backgroundRefresh,
+                        onCheckedChange = { onToggleBackgroundRefresh() },
+                    )
+                }
                 OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text("About") }
             }
         },
@@ -236,6 +304,7 @@ private fun SettingsDialog(
 private fun SessionInfoDialog(
     pairing: Pairing?,
     sessionStatus: SessionStatus?,
+    archived: Boolean,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -247,13 +316,19 @@ private fun SessionInfoDialog(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (pairing == null) {
+                    if (archived) {
+                        Text("Saved conversation. This tab is not connected.")
+                    } else if (pairing == null) {
                         Text("Not paired. Scan a QR or paste a pairing URL.")
                     } else {
                         Text("Session ID", style = MaterialTheme.typography.labelSmall)
                         Text(pairing.sessionId, fontFamily = FontFamily.Monospace)
                         Text("Companion", style = MaterialTheme.typography.labelSmall)
                         Text("${pairing.host}:${pairing.port}")
+                        if (sessionStatus?.hostname?.isNotBlank() == true) {
+                            Text("Hostname", style = MaterialTheme.typography.labelSmall)
+                            Text(sessionStatus.hostname)
+                        }
                         Text("Apple ID lock", style = MaterialTheme.typography.labelSmall)
                         Text(if (pairing.requireApple) "Required" else "Off")
                         Text("Cert pin", style = MaterialTheme.typography.labelSmall)
@@ -322,6 +397,144 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
+private fun SessionTabs(
+    sessions: List<SessionRecord>,
+    activeId: String?,
+    onSelect: (String) -> Unit,
+    onRename: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        sessions.forEach { rec ->
+            val selected = rec.id == activeId
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (selected) AccentCyan.copy(alpha = 0.22f) else BgRaised,
+                modifier = Modifier
+                    .semantics {
+                        contentDescription = rec.name
+                        role = Role.Button
+                    }
+                    .pointerInput(rec.id) {
+                        detectTapGestures(
+                            onTap = { onSelect(rec.id) },
+                            onLongPress = { onRename(rec.id) },
+                        )
+                    },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        rec.name.ifBlank { rec.id.take(8) },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (selected) AccentCyan else Ink,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                    if (rec.archived) {
+                        Text("saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (rec.unread) {
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .background(AccentWarn, RoundedCornerShape(50)),
+                        )
+                    }
+                }
+            }
+        }
+        val addSelected = activeId == ADD_TAB_ID
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (addSelected) AccentCyan.copy(alpha = 0.22f) else BgRaised,
+            modifier = Modifier
+                .semantics {
+                    contentDescription = "Add session"
+                    role = Role.Button
+                }
+                .clickable { onSelect(ADD_TAB_ID) },
+        ) {
+            Text(
+                "+",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                color = if (addSelected) AccentCyan else Ink,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnpairDialog(
+    archived: Boolean,
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(if (archived) "Delete saved conversation?" else "Unpair this session?") },
+        text = {
+            Text(
+                if (archived) {
+                    "This removes the copy stored on this phone."
+                } else {
+                    "This drops the connection. Save the conversation on this phone?"
+                },
+            )
+        },
+        confirmButton = {
+            if (archived) {
+                TextButton(onClick = onDiscard) { Text("Delete") }
+            } else {
+                TextButton(onClick = onSave) { Text("Save") }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (!archived) {
+                    TextButton(onClick = onDiscard) { Text("Don't save") }
+                }
+                TextButton(onClick = onCancel) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun RenameDialog(
+    current: String,
+    onConfirm: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var draft by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Session name") },
+        text = {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { if (it.length <= 40) draft = it },
+                singleLine = true,
+                label = { Text("Name") },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(draft) }, enabled = draft.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text("Cancel") }
         },
     )
 }
@@ -406,12 +619,12 @@ private fun ThreadPane(
     messages: List<ChatMessage>,
     draft: String,
     sending: Boolean,
+    archived: Boolean,
     status: String?,
     sessionStatus: SessionStatus?,
     statusExpanded: Boolean,
     onDraft: (String) -> Unit,
     onSend: () -> Unit,
-    onUnpair: () -> Unit,
     onToggleStatus: () -> Unit,
 ) {
     val hideKeyboard = rememberHideKeyboard()
@@ -422,7 +635,7 @@ private fun ThreadPane(
         }
     }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatusCard(sessionStatus, sending, statusExpanded, onToggleStatus)
+        if (!archived) StatusCard(sessionStatus, sending, statusExpanded, onToggleStatus)
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -447,31 +660,33 @@ private fun ThreadPane(
         status?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        OutlinedTextField(
-            value = draft,
-            onValueChange = onDraft,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Message") },
-            minLines = 1,
-            maxLines = 6,
-            enabled = !sending,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = {
-                hideKeyboard()
-                onSend()
-            }),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    hideKeyboard()
-                    onSend()
-                },
-                enabled = !sending && draft.isNotBlank(),
+        if (!archived) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(if (sending) "Sending…" else "Send")
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = onDraft,
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Message") },
+                    singleLine = false,
+                    minLines = 1,
+                    maxLines = 6,
+                    enabled = !sending,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                )
+                Button(
+                    onClick = {
+                        hideKeyboard()
+                        onSend()
+                    },
+                    enabled = !sending && draft.isNotBlank(),
+                ) {
+                    Text(if (sending) "Sending…" else "Send")
+                }
             }
-            OutlinedButton(onClick = onUnpair, enabled = !sending) { Text("Unpair") }
         }
     }
 }
@@ -710,6 +925,55 @@ private fun MessageBubble(message: ChatMessage) {
                 }
             }
         }
+    }
+}
+
+private val HeaderIconSize = 44.dp
+private val HeaderGlyphSize = 22.dp
+
+@Composable
+private fun DisconnectIconButton(
+    archived: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    HeaderIconButton(
+        label = if (archived) "Delete saved conversation" else "Unpair",
+        enabled = enabled,
+        onClick = onClick,
+    ) {
+        DisconnectGlyph(
+            modifier = Modifier.size(HeaderGlyphSize),
+            tint = if (enabled) Color.White else Color.White.copy(alpha = 0.35f),
+        )
+    }
+}
+
+@Composable
+private fun SettingsIconButton(onClick: () -> Unit) {
+    HeaderIconButton(label = "Settings", onClick = onClick) {
+        SettingsGlyph(modifier = Modifier.size(HeaderGlyphSize), tint = Color.White)
+    }
+}
+
+@Composable
+private fun HeaderIconButton(
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(HeaderIconSize)
+            .semantics {
+                contentDescription = label
+                role = Role.Button
+            }
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        icon()
     }
 }
 

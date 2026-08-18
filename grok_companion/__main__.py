@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from grok_companion.security import (
+    choose_listen_port,
+    companion_hostname,
     ensure_tls,
     lan_ip,
     new_token,
@@ -68,10 +70,15 @@ def main(argv: list[str] | None = None) -> int:
     if not token:
         print("invalid token file", file=sys.stderr)
         return 2
+    try:
+        port, listen_sock = choose_listen_port(args.port, args.bind)
+    except OSError:
+        print("no free port for the companion", file=sys.stderr)
+        return 1
     host = lan_ip()
     url = pairing_url(
         host,
-        args.port,
+        port,
         args.session,
         token,
         fingerprint,
@@ -82,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         print(msg, flush=True)
 
     out()
-    out("Grok Mirror pairing — v2.2 - settings, album QR, grok-companion")
+    out("Grok Mirror pairing — v3.0 - multiple sessions")
     if args.require_apple:
         out("Apple ID required — iPhone only. Android cannot pair. The QR does not contain your Apple ID.")
     if args.quiet:
@@ -107,7 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         out(url)
     out()
     out(f"Session: {args.session}")
-    out(f"Reach:   https://{host}:{args.port}")
+    out(f"Host:    {companion_hostname()}")
+    out(f"Reach:   https://{host}:{port}")
     out(f"Pin:     sha256:{fingerprint}")
     out("Ctrl+C to stop. Leave this process running while you use the phone.")
     out()
@@ -118,9 +126,11 @@ def main(argv: list[str] | None = None) -> int:
         session_dir=session_dir,
         cwd=Path(args.cwd).resolve(),
         require_apple=args.require_apple,
-        apple_bind_path=grok_home / "mirror" / "apple_bind.json" if args.require_apple else None,
+        apple_bind_path=(
+            grok_home / "mirror" / f"apple_bind.{args.session}.json" if args.require_apple else None
+        ),
     )
-    httpd = serve(state, cert, key, args.bind, args.port)
+    httpd = serve(state, cert, key, args.bind, port, listen_sock=listen_sock)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

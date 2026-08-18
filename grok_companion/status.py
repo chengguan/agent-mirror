@@ -9,6 +9,7 @@ from typing import Any
 from grok_companion.billing import load_billing
 from grok_companion.inbox import load_inbox
 from grok_companion.inbox import tui_owns_session
+from grok_companion.security import companion_hostname
 
 TAIL_BYTES = 128 * 1024
 
@@ -28,6 +29,7 @@ def live_status(session_dir: Path, grok_home: Path, session_id: str) -> dict[str
         "model": str(summary.get("current_model_id") or usage.get("model") or ""),
         "inbox": inbox_n,
         "tui": tui_owns_session(),
+        "hostname": companion_hostname(),
         **usage,
         "context_percent": usage.get("usage_percent", 0),
         # Do not let session-context % stand in for /usage billing.

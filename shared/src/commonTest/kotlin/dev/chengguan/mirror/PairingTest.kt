@@ -175,10 +175,65 @@ class PairingTest {
     }
 
     @Test
+    fun sessionCatalogRoundTripPreservesPairing() {
+        val pairing = parsePairing(valid)
+        assertNotNull(pairing)
+        val rec = SessionRecord(id = pairing.sessionId, name = "Air", pairing = pairing, archived = false)
+        val encoded = encodeSessionCatalog(listOf(rec), pairing.sessionId)
+        val (items, active) = parseSessionCatalog(encoded)
+        assertEquals(1, items.size)
+        assertEquals("Air", items[0].name)
+        assertEquals(pairing.sessionId, active)
+        assertEquals(pairing.host, items[0].pairing?.host)
+        assertEquals(pairing.token, items[0].pairing?.token)
+    }
+
+    @Test
+    fun defaultSessionNamePrefersHostnameThenMagicDns() {
+        val pairing = parsePairing(valid.replace("192.168.1.20", "chengs-macbook-air.tailb2aa5a.ts.net"))
+        assertNotNull(pairing)
+        assertEquals("office", defaultSessionName(pairing, "office"))
+        assertEquals("chengs-macbook-air", defaultSessionName(pairing, null))
+    }
+
+    @Test
+    fun migrateLegacyPairing() {
+        val rec = migrateLegacyPairing(valid)
+        assertNotNull(rec)
+        assertEquals("01a003db-06b0-7a53-9d42-f263250c7890", rec.id)
+        assertEquals(false, rec.archived)
+    }
+
+    @Test
+    fun encodeArchiveFitsMaxBytes() {
+        val long = "x".repeat(4_096)
+        val messages = (1..200).map { ChatMessage("user", long) }
+        val raw = encodeArchive(messages, maxBytes = 8_192)
+        assertTrue(raw.encodeToByteArray().size <= 8_192)
+        assertTrue(parseArchive(raw).isNotEmpty() || raw == """{"messages":[]}""")
+    }
+
+    @Test
     fun collapseConsecutiveDuplicateUserTurns() {
         val hello = ChatMessage("user", "hello")
         val reply = ChatMessage("assistant", "hi")
         val collapsed = collapseDuplicateUserTurns(listOf(hello, hello, reply, hello))
         assertEquals(listOf(hello, reply, hello), collapsed)
+    }
+
+    @Test
+    fun rollbackOptimisticUserDropsMatchingTail() {
+        val prior = ChatMessage("assistant", "ok")
+        val sent = ChatMessage("user", "hello")
+        assertEquals(listOf(prior), rollbackOptimisticUser(listOf(prior, sent), "hello"))
+    }
+
+    @Test
+    fun rollbackOptimisticUserLeavesServerThreadAlone() {
+        val prior = ChatMessage("user", "hello")
+        val reply = ChatMessage("assistant", "hi")
+        val thread = listOf(prior, reply)
+        assertEquals(thread, rollbackOptimisticUser(thread, "hello"))
+        assertEquals(emptyList(), rollbackOptimisticUser(emptyList(), "hello"))
     }
 }

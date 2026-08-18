@@ -1,6 +1,6 @@
 # grok-mirror
 
-**Mirror** — **v2.2 - settings, album QR, grok-companion**
+**Mirror** — **v3.0 - multiple sessions**
 
 Unofficial companion: the Mac hosts this Grok Build session; the iPhone/Android
 app scans a QR and shows the thread so you can keep talking on the move.

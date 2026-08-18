@@ -192,3 +192,32 @@ def pairing_url(
         # Flag only — never put an Apple ID or email in the QR.
         query["apple"] = "1"
     return f"grok-mirror://v1?{urlencode(query)}"
+
+
+def companion_hostname() -> str:
+    """Short Mac name for the phone tab. Never a secret."""
+    import socket
+
+    name = (socket.gethostname() or "").strip()
+    if name.endswith(".local"):
+        name = name[: -len(".local")]
+    name = name.split(".")[0].strip()
+    return name[:40] or "Mac"
+
+
+def choose_listen_port(preferred: int, bind: str = "0.0.0.0"):
+    """Bind and keep the socket so the chosen port cannot be stolen."""
+    import socket
+
+    ports = [preferred] if preferred != 8787 else list(range(8787, 8820))
+    host = "" if bind in {"0.0.0.0", "::"} else bind
+    last_error: OSError | None = None
+    for port in ports:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.bind((host, port))
+            return port, sock
+        except OSError as exc:
+            last_error = exc
+            sock.close()
+    raise OSError(str(last_error or "no free Mirror port"))

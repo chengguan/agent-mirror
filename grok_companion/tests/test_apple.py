@@ -90,3 +90,12 @@ def test_apple_bind_roundtrip(tmp_path: Path):
         apple_bind_path=path,
     )
     assert state.apple_sub == "001234.aabbccddeeff"
+
+
+def test_apple_bind_migrates_legacy_file(tmp_path: Path):
+    sid = "01a003db-06b0-7a53-9d42-f263250c7890"
+    legacy = tmp_path / "apple_bind.json"
+    per = tmp_path / f"apple_bind.{sid}.json"
+    _save_apple_bind(legacy, sid, "001234.aabbccddeeff")
+    assert _load_apple_bind(per, sid) == "001234.aabbccddeeff"
+    assert per.is_file()

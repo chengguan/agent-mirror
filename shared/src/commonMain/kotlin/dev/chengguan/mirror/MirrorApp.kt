@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import dev.chengguan.mirror.security.platformDeviceAuthenticator
+import dev.chengguan.mirror.security.platformProtectedFiles
 import dev.chengguan.mirror.security.platformSecureStore
 import dev.chengguan.mirror.ui.ChatScreen
 import dev.chengguan.mirror.ui.MirrorTheme
@@ -16,6 +17,7 @@ fun MirrorApp(incomingLink: String? = null) {
         MirrorViewModel(
             store = platformSecureStore(),
             authenticator = platformDeviceAuthenticator(),
+            files = platformProtectedFiles(),
             incomingLink = incomingLink,
         )
     }
@@ -42,9 +44,16 @@ fun MirrorApp(incomingLink: String? = null) {
             onDraft = viewModel::onDraft,
             onSend = viewModel::send,
             onApplyLink = viewModel::applyLink,
-            onUnpair = viewModel::unpair,
+            onSelectSession = viewModel::selectSession,
+            onStartRename = viewModel::startRename,
+            onCancelRename = viewModel::cancelRename,
+            onRename = viewModel::renameSession,
+            onRequestUnpair = viewModel::requestUnpair,
+            onConfirmUnpair = viewModel::confirmUnpair,
+            onCancelUnpair = viewModel::cancelUnpair,
             onLock = viewModel::lock,
             onToggleStatus = viewModel::toggleStatusExpanded,
+            onToggleBackgroundRefresh = viewModel::toggleBackgroundRefresh,
         )
     }
 }
