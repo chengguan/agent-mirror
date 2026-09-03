@@ -1,4 +1,4 @@
-from grok_companion.security import is_tailscale_ipv4, pairing_url, valid_session_id
+from mirror_companion.security import is_tailscale_ipv4, pairing_url, valid_session_id
 
 
 def test_pairing_url_shape():
@@ -9,7 +9,7 @@ def test_pairing_url_shape():
         "abcdefghijklmnopqrstuvwxyz012345",
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     )
-    assert url.startswith("grok-mirror://v1?")
+    assert url.startswith("mirror://v1?")
     assert "host=192.168.1.20" in url
     assert "port=8787" in url
     assert "sid=01a003db-06b0-7a53-9d42-f263250c7890" in url

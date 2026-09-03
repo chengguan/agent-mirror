@@ -145,7 +145,7 @@ def ensure_tls(tls_dir: Path) -> tuple[Path, Path, str]:
                 "-out",
                 str(cert),
                 "-subj",
-                "/CN=grok-mirror.local",
+                "/CN=mirror.local",
             ],
             check=True,
             capture_output=True,
@@ -191,7 +191,7 @@ def pairing_url(
     if require_apple:
         # Flag only — never put an Apple ID or email in the QR.
         query["apple"] = "1"
-    return f"grok-mirror://v1?{urlencode(query)}"
+    return f"mirror://v1?{urlencode(query)}"
 
 
 def companion_hostname() -> str:

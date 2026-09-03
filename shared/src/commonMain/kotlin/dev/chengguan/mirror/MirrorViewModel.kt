@@ -693,7 +693,7 @@ class MirrorViewModel(
 }
 
 fun encodePairing(pairing: Pairing): String =
-    "grok-mirror://v1?host=${pairing.host}&port=${pairing.port}" +
+    "mirror://v1?host=${pairing.host}&port=${pairing.port}" +
         "&sid=${pairing.sessionId}&tok=${pairing.token}&fp=${pairing.fingerprint}" +
         if (pairing.requireApple) "&apple=1" else ""
 

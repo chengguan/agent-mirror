@@ -23,10 +23,10 @@ MAX_MESSAGES = 2_000
 MAX_TEXT = 32_768
 
 
-def find_session_dir(grok_home: Path, session_id: str) -> Path | None:
+def find_session_dir(agent_home: Path, session_id: str) -> Path | None:
     if not _valid_session_id(session_id):
         return None
-    root = grok_home / "sessions"
+    root = agent_home / "sessions"
     if not root.is_dir():
         return None
     for path in root.rglob(session_id):

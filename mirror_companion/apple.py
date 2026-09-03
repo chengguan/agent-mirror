@@ -27,7 +27,7 @@ def fetch_apple_jwks() -> dict[str, Any]:
         return _jwks_cache[1]
     req = urllib.request.Request(
         APPLE_JWKS_URL,
-        headers={"Accept": "application/json", "User-Agent": "grok-companion/1.0"},
+        headers={"Accept": "application/json", "User-Agent": "mirror-companion/1.0"},
     )
     ctx = ssl.create_default_context()
     with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:

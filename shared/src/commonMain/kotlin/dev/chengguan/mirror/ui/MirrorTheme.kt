@@ -6,7 +6,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// GrokNight — same slots as the default Grok Build TUI.
+// MirrorNight — same color slots as the default terminal agent TUI theme.
 val Ink = Color(0xFFE1E1E1)
 val AccentUser = Color(0xFFBB9AF7)
 val AccentAssistant = Color(0xFF7AA2F7)

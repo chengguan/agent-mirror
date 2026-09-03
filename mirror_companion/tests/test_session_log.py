@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from grok_companion.session_log import load_messages
+from mirror_companion.session_log import load_messages
 
 
 def test_load_chunks(tmp_path: Path):

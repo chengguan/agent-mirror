@@ -128,7 +128,7 @@ private fun mergeAdjacent(runs: List<ChatRun>): List<ChatRun> {
 }
 
 private fun isPath(token: String): Boolean {
-    if (token.startsWith("https://") || token.startsWith("http://") || token.startsWith("grok-mirror://")) {
+    if (token.startsWith("https://") || token.startsWith("http://") || token.startsWith("mirror://")) {
         return false
     }
     if (token.startsWith("~/") || token.startsWith("/") || token.startsWith("./")) {

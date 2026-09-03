@@ -17,6 +17,6 @@ object QrScanner {
 fun looksLikePairingPayload(raw: String): Boolean {
     val trimmed = raw.trim()
     if (trimmed.length > 2_000) return false
-    return trimmed.startsWith("grok-mirror://", ignoreCase = true) ||
-        trimmed.startsWith("GROK-MIRROR:")
+    return trimmed.startsWith("mirror://", ignoreCase = true) ||
+        trimmed.startsWith("MIRROR:")
 }

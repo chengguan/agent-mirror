@@ -6,8 +6,8 @@ import json
 import time
 from pathlib import Path
 
-from grok_companion.inbox import inbox_path
-from grok_companion.security import valid_session_id
+from mirror_companion.inbox import inbox_path
+from mirror_companion.security import valid_session_id
 
 
 class InboxTail:
@@ -57,10 +57,10 @@ def format_event(text: str) -> str:
     return f"MIRROR {one_line}"
 
 
-def watch_inbox(grok_home: Path, session_id: str, *, interval: float = 0.25) -> None:
+def watch_inbox(agent_home: Path, session_id: str, *, interval: float = 0.25) -> None:
     if not valid_session_id(session_id):
         raise SystemExit(2)
-    path = inbox_path(grok_home, session_id)
+    path = inbox_path(agent_home, session_id)
     tail = InboxTail()
     while True:
         for text in tail.pull(path):

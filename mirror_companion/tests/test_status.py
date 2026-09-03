@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from grok_companion.status import classify, live_status
+from mirror_companion.status import classify, live_status
 
 
 def test_classify_working_and_idle():
@@ -23,7 +23,7 @@ def test_classify_working_and_idle():
 
 
 def test_live_status_from_log(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("GROK_HOME", str(tmp_path))
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
     sid = "01a003db-06b0-7a53-9d42-f263250c7890"
     sess = tmp_path / "sess"
     sess.mkdir()

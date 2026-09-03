@@ -1,13 +1,13 @@
-# grok-mirror
+# Mirror
 
 **Mirror** — **v3.0 - multiple sessions**
 
-Unofficial companion: the Mac hosts this Grok Build session; the iPhone/Android
+Unofficial companion: the Mac hosts a Grok Build CLI session; the iPhone/Android
 app scans a QR and shows the thread so you can keep talking on the move.
 Same Wi-Fi, or Tailscale when the phone is on mobile data.
 
-The Mac process is **grok-companion** (`python3 -m grok_companion`). That name
-is reserved for a later PyPI upload; it has not been published yet.
+The Mac process is **mirror-companion** (`python3 -m mirror_companion`). That
+name is reserved for a later PyPI upload; it has not been published yet.
 
 Not an official xAI product. The Mac must stay awake. Do not expose the
 companion to the public internet.
@@ -16,9 +16,9 @@ companion to the public internet.
 
 | Piece | Path |
 |---|---|
-| Mac companion | `grok_companion/` (`python3 -m grok_companion pair --session <id>`) |
+| Mac companion | `mirror_companion/` (`python3 -m mirror_companion pair --session <id>`) |
 | Phone app | `androidApp/` + `iosApp/` + `shared/` |
-| Skill (all workspaces) | `~/.grok/skills/grok-mirror/SKILL.md` |
+| Skill (all workspaces) | `~/.grok/skills/mirror/SKILL.md` |
 
 Home screen name: **Mirror**.
 
@@ -28,16 +28,16 @@ On the Mac (Grok will do this when you say “pair” / “QR”):
 
 ```bash
 cd ~/projects/grok-mirror
-python3 -m grok_companion pair --session <SESSION_ID> --cwd ~
+python3 -m mirror_companion pair --session <SESSION_ID> --cwd ~
 ```
 
 Tap **Scan QR** in Mirror and point the camera at the terminal QR, tap
 **Choose from Photos** to pick a saved QR image, or paste the pairing URL.
-The system Camera still opens `grok-mirror://` if you prefer. Keep that
+The system Camera still opens `mirror://` if you prefer. Keep that
 process running.
 
-Phone sends the next turn with `grok --resume <id> --single …`. Avoid typing
-in the TUI at the same time.
+Phone sends the next turn with `grok --resume <id> --single …` (the Mac's
+locally installed Grok Build CLI). Avoid typing in the TUI at the same time.
 
 ## Security (Agents.md)
 

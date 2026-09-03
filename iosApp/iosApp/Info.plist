@@ -25,7 +25,7 @@
 			<string>dev.chengguan.mirror</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>grok-mirror</string>
+				<string>mirror</string>
 			</array>
 		</dict>
 	</array>

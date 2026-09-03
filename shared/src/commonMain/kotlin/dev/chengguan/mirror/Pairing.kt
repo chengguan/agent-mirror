@@ -16,8 +16,8 @@ data class Pairing(
 fun parsePairing(raw: String): Pairing? {
     val trimmed = raw.trim()
     if (trimmed.length > 2_000) return null
-    val uri = trimmed.removePrefix("GROK-MIRROR:").let {
-        if (it.startsWith("grok-mirror://", ignoreCase = true)) it else return null
+    val uri = trimmed.removePrefix("MIRROR:").let {
+        if (it.startsWith("mirror://", ignoreCase = true)) it else return null
     }
     val qIndex = uri.indexOf('?')
     if (qIndex < 0) return null

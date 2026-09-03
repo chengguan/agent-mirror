@@ -1,11 +1,11 @@
-from grok_companion.security import (
+from mirror_companion.security import (
     choose_listen_port,
     companion_hostname,
     token_matches,
     valid_message,
     valid_session_id,
 )
-from grok_companion.session_log import _valid_session_id
+from mirror_companion.session_log import _valid_session_id
 
 
 def test_session_id():

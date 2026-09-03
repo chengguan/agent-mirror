@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from grok_companion.billing import load_billing
+from mirror_companion.billing import load_billing
 
 
 def test_load_billing_from_log(tmp_path: Path):

@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class PairingTest {
     private val valid =
-        "grok-mirror://v1?host=192.168.1.20&port=8787" +
+        "mirror://v1?host=192.168.1.20&port=8787" +
             "&sid=01a003db-06b0-7a53-9d42-f263250c7890" +
             "&tok=abcdefghijklmnopqrstuvwxyz012345" +
             "&fp=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -16,7 +16,7 @@ class PairingTest {
     @Test
     fun looksLikePairingPayloadAcceptsScheme() {
         assertTrue(looksLikePairingPayload(valid))
-        assertTrue(looksLikePairingPayload("GROK-MIRROR:$valid"))
+        assertTrue(looksLikePairingPayload("MIRROR:$valid"))
         assertTrue(!looksLikePairingPayload("https://example.com"))
         assertTrue(!looksLikePairingPayload(""))
     }

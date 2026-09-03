@@ -1,4 +1,4 @@
-rootProject.name = "grok-mirror"
+rootProject.name = "mirror"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

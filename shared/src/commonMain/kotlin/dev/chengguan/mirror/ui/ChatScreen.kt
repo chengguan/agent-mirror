@@ -909,7 +909,7 @@ private fun MessageBubble(message: ChatMessage) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            if (mine) "You" else "Grok",
+                            if (mine) "You" else "Agent",
                             style = MaterialTheme.typography.labelSmall,
                             color = accent,
                         )

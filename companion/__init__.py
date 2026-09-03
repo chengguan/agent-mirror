@@ -1,1 +1,1 @@
-"""Deprecated local alias. Prefer `import grok_companion`."""
+"""Deprecated local alias. Prefer `import mirror_companion`."""

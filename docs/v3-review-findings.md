@@ -14,7 +14,8 @@ Companion test suite passed (32/32) at review time. After the fixes:
 ## Security review — clean
 
 Full trust-boundary trace (pairing token, TLS pinning, per-session file
-scoping, subprocess handling) across `grok_companion/*.py` and the Kotlin
+scoping, subprocess handling) across `mirror_companion/*.py` (then
+`grok_companion/*.py`) and the Kotlin
 `shared/` module found no HIGH/MEDIUM-confidence vulnerability introduced by
 the v3 diff. Specifically verified safe: `choose_listen_port()`'s socket
 reservation (fixes a TOCTOU port-steal race rather than opening one), the

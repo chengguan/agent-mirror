@@ -6,21 +6,21 @@ import json
 from pathlib import Path
 from typing import Any
 
-from grok_companion.billing import load_billing
-from grok_companion.inbox import load_inbox
-from grok_companion.inbox import tui_owns_session
-from grok_companion.security import companion_hostname
+from mirror_companion.billing import load_billing
+from mirror_companion.inbox import load_inbox
+from mirror_companion.inbox import tui_owns_session
+from mirror_companion.security import companion_hostname
 
 TAIL_BYTES = 128 * 1024
 
 
-def live_status(session_dir: Path, grok_home: Path, session_id: str) -> dict[str, Any]:
+def live_status(session_dir: Path, agent_home: Path, session_id: str) -> dict[str, Any]:
     summary = _read_json(session_dir / "summary.json")
     last = _last_update(session_dir / "updates.jsonl")
-    inbox_n = len(load_inbox(grok_home, session_id))
+    inbox_n = len(load_inbox(agent_home, session_id))
     phase, detail = classify(last, inbox_n, summary)
     usage = usage_from_signals(session_dir / "signals.json", summary)
-    billing = load_billing(grok_home)
+    billing = load_billing(agent_home)
     # usage_percent is account /usage credit when billing is present.
     # Context-window tokens stay on tokens_* / context_percent.
     payload = {

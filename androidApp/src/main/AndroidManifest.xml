@@ -33,7 +33,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="grok-mirror" android:host="v1" />
+                <data android:scheme="mirror" android:host="v1" />
             </intent-filter>
         </activity>
         <activity

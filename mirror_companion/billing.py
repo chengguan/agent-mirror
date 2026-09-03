@@ -17,8 +17,8 @@ TAIL_BYTES = 4 * 1024 * 1024
 BILLING_MSG = "billing: fetched credits config"
 
 
-def load_billing(grok_home: Path) -> dict[str, Any]:
-    ctx = _latest_credits_config(grok_home / "logs" / "unified.jsonl")
+def load_billing(agent_home: Path) -> dict[str, Any]:
+    ctx = _latest_credits_config(agent_home / "logs" / "unified.jsonl")
     if not ctx:
         return {}
     config = ctx.get("config") if isinstance(ctx.get("config"), dict) else {}

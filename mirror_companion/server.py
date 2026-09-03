@@ -12,17 +12,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from grok_companion.apple import DEFAULT_AUDIENCE, verify_apple_identity_token
-from grok_companion.inbox import append_inbox, load_inbox, tui_owns_session
-from grok_companion.security import MAX_MESSAGE, token_matches, valid_message
-from grok_companion.session_log import load_messages
-from grok_companion.status import live_status
+from mirror_companion.apple import DEFAULT_AUDIENCE, verify_apple_identity_token
+from mirror_companion.inbox import append_inbox, load_inbox, tui_owns_session
+from mirror_companion.security import MAX_MESSAGE, token_matches, valid_message
+from mirror_companion.session_log import load_messages
+from mirror_companion.status import live_status
 
-GROK_BIN = os.environ.get("GROK_BIN", str(Path.home() / ".grok/bin/grok"))
+AGENT_BIN = os.environ.get("AGENT_BIN", str(Path.home() / ".grok/bin/grok"))
 
 
-def grok_home() -> Path:
-    return Path(os.environ.get("GROK_HOME", str(Path.home() / ".grok")))
+def agent_home() -> Path:
+    return Path(os.environ.get("AGENT_HOME", str(Path.home() / ".grok")))
 
 
 class BridgeState:
@@ -140,7 +140,7 @@ def make_handler(state: BridgeState):
             # A live TUI already owns this session; grok --resume would hang
             # and the phone Send button would stay disabled.
             if tui_owns_session():
-                append_inbox(grok_home(), state.session_id, text)
+                append_inbox(agent_home(), state.session_id, text)
                 # Do not echo the full thread — parsing it on Send crashed iOS.
                 self._ok({"ok": True, "queued": True, "status": _status(state)})
                 return
@@ -152,7 +152,7 @@ def make_handler(state: BridgeState):
             try:
                 result = subprocess.run(
                     [
-                        GROK_BIN,
+                        AGENT_BIN,
                         "--resume",
                         state.session_id,
                         "--cwd",
@@ -169,12 +169,12 @@ def make_handler(state: BridgeState):
             except (OSError, subprocess.TimeoutExpired):
                 with state.lock:
                     state.busy = False
-                self._bad(502, "grok failed")
+                self._bad(502, "agent failed")
                 return
             with state.lock:
                 state.busy = False
             if result.returncode != 0:
-                self._bad(502, "grok failed")
+                self._bad(502, "agent failed")
                 return
             payload = _snapshot(state)
             payload["ok"] = True
@@ -257,7 +257,7 @@ def _json_bytes(payload: Any) -> bytes:
 def _visible_messages(state: BridgeState) -> list:
     return _merge_inbox(
         load_messages(state.session_dir),
-        load_inbox(grok_home(), state.session_id),
+        load_inbox(agent_home(), state.session_id),
     )
 
 
@@ -280,7 +280,7 @@ def _merge_inbox(messages: list, inbox: list) -> list:
 
 
 def _status(state: BridgeState) -> dict:
-    return live_status(state.session_dir, grok_home(), state.session_id)
+    return live_status(state.session_dir, agent_home(), state.session_id)
 
 
 def _snapshot(state: BridgeState) -> dict:

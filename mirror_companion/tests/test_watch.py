@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from grok_companion.inbox import append_inbox, drain_inbox
-from grok_companion.watch import InboxTail, format_event, parse_inbox_line
+from mirror_companion.inbox import append_inbox, drain_inbox
+from mirror_companion.watch import InboxTail, format_event, parse_inbox_line
 
 
 def test_parse_and_format():
