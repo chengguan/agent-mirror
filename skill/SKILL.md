@@ -14,7 +14,7 @@ When the user wants to mirror **this** session to their phone:
 2. Start the companion from the project (do not kill it until they are done):
 
 ```bash
-cd ~/projects/grok-mirror
+cd ~/projects/agent-mirror
 python3 -m mirror_companion pair --session <SESSION_ID> --cwd <WORKSPACE>
 ```
 
@@ -33,7 +33,7 @@ Use the real session id and the workspace cwd. Bind stays on the LAN (`0.0.0.0`,
 5. If this TUI is already running, the companion queues phone sends in `~/.grok/mirror/inbox/<SESSION_ID>.jsonl` instead of `grok --resume` (that would hang). After pairing, start a **persistent monitor** (do not print tokens):
 
 ```bash
-cd ~/projects/grok-mirror
+cd ~/projects/agent-mirror
 PYTHONUNBUFFERED=1 python3 -m mirror_companion watch --session <SESSION_ID>
 ```
 

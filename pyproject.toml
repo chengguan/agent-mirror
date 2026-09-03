@@ -31,8 +31,8 @@ dev = ["pytest>=8.0"]
 mirror-companion = "mirror_companion.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/chengguan/grok-mirror"
-Repository = "https://github.com/chengguan/grok-mirror"
+Homepage = "https://github.com/chengguan/agent-mirror"
+Repository = "https://github.com/chengguan/agent-mirror"
 
 [tool.setuptools.packages.find]
 include = ["mirror_companion*"]

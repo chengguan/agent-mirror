@@ -27,7 +27,7 @@ Home screen name: **Mirror**.
 On the Mac (Grok will do this when you say “pair” / “QR”):
 
 ```bash
-cd ~/projects/grok-mirror
+cd ~/projects/agent-mirror
 python3 -m mirror_companion pair --session <SESSION_ID> --cwd ~
 ```
 
@@ -51,7 +51,7 @@ locally installed Grok Build CLI). Avoid typing in the TUI at the same time.
 
 ## Build
 
-Android Studio: open `~/projects/grok-mirror`. JDK is Android Studio’s JBR.
+Android Studio: open `~/projects/agent-mirror`. JDK is Android Studio’s JBR.
 
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
